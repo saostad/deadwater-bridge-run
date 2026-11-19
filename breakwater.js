@@ -588,8 +588,8 @@ const Breakwater = (() => {
       for(const e of run.fallen)if(visible(e))zombie(e);
       const gun=run.weapons.at(-1) ?? 'standard';
       const style=weaponEffects[gun];
-      function soldier(x,z,phase,stride,kick,fall=0) {
-        const args=[x,0,z,camera.soldierScale,1,phase,stride,kick*style.recoil,0,1,fall];
+      function soldier(x,z,phase,stride,kick,fall=0,scale=1) {
+        const args=[x,0,z,camera.soldierScale*scale,1,phase,stride,kick*style.recoil,0,1,fall];
         put('squad',...args);
         put('gun-'+gun,...args);
       }
@@ -604,7 +604,7 @@ const Breakwater = (() => {
         }
         put('ring',x,0,z,camera.soldierScale);
         put('contact',x,.013,z,camera.soldierScale,8);
-        soldier(x,z,time*13+i,Math.min(.65,Math.abs(run.velocity)*.4),kick);
+        soldier(x,z,time*13+i,Math.min(.65,Math.abs(run.velocity)*.4+p.joining*.6),kick,0,p.scale);
       });
       for(const shot of run.shots){
         const start=shot.muzzle, aim=Math.min(1,shot.z/Math.max(1,shot.target?.z??shot.range));

@@ -63,7 +63,7 @@ button:focus-visible { outline: 3px solid white; outline-offset: 4px; }
 .progress div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 8px; }
 .progress div > span { white-space: nowrap; }
 .squad-readout { color: var(--accent); }
-#squad { font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
+#squad { display: inline-block; min-width: 3ch; text-align: right; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
 progress { display: block; width: 100%; height: 4px; margin-top: 7px; accent-color: var(--accent); border: 0; background: #536064; }
 progress::-webkit-progress-bar { background: #536064; }
 progress::-webkit-progress-value { background: var(--accent); }
@@ -86,6 +86,12 @@ kbd { display: inline-block; min-width: 24px; text-align: center; border: 1px so
   .layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   aside { display: grid; grid-template-columns: 1fr 1fr; }
   .panel, .restart { padding: 12px; }
+}
+@media (max-width: 440px) {
+  .progress > div { display: grid; grid-template-columns: 1fr .8fr 1.2fr; align-items: end; }
+  .progress > div > span { display: flex; flex-direction: column; }
+  .progress .squad-readout { flex-direction: column-reverse; }
+  #squad { text-align: left; }
 }
 @media (max-width: 375px) { aside { grid-template-columns: 1fr; } }
 

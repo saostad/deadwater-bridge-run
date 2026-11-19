@@ -14,6 +14,8 @@ const gateBalance = {
   penaltyLane: .72, laneClearance: 15, penaltyBase: 2, levelsPerPenalty: 6, penaltyMax: 5,
 };
 
+const recruitment = {settleTime: .52, arrivalSpacing: .055, entryDepth: 1.35, entryScale: .65};
+
 const walker = {health: 2, pace: .74, siegePace: .76, siegeHealthyEvery: 2, staggerTime: .17, staggerPace: .32, limpPace: .81};
 const crowdCamera = {start: 32, full: 130, widen: .16, pullback: .34, pitch: .13,
   riseTime: 1.2, returnTime: 2.2, extraView: 42, visibleSquadMax: 20};
@@ -899,7 +901,7 @@ function updateHud() {
   byId('distance').value = percent;
   byId('percent').textContent = percent + '%';
   const squad = byId('squad');
-  const squadCount = String(run.count);
+  const squadCount = String(Math.round(displayedSquadCount()));
   if (squad.textContent !== squadCount) squad.textContent = squadCount;
   const breaches = byId('breaches');
   const tally = run.breaches + ' / ' + run.breachLimit;
@@ -931,7 +933,7 @@ function damage(count, threat, announce = true) {
   run.armor -= blocked;
   const lost = Math.min(run.count, count - blocked);
   if (lost) {
-    run.count -= lost;
+    changeSquadSize(-lost, run.x);
     run.lastThreat = threat;
     run.flash = config.damageFlash;
     playSound('damage');
@@ -1186,7 +1188,7 @@ function unlockCache(cache) {
       run.aimBonus += upgrade.aim;
       break;
     case 'rescue':
-      run.count += Math.ceil(armory.rescueCount * run.difficulty.supplies);
+      changeSquadSize(Math.ceil(armory.rescueCount * run.difficulty.supplies), cache.x);
       combatNotice('Rescue crate · ' + run.count + ' in squad');
       break;
     case 'armor':
@@ -1455,8 +1457,7 @@ function step(dt) {
           return;
         }
       } else {
-        run.count += gate.count;
-        run.recruits.push({x: gate.x, count: gate.count, time: run.elapsed});
+        changeSquadSize(gate.count, gate.x);
         playSound('recruit');
       }
     }
@@ -1648,6 +1649,44 @@ function cameraHalfScreen() {
   return (onStage() ? Breakwater.camera.halfScreen : .49) * (1 - crowdCamera.widen * run.crowd);
 }
 
+function settleProgress(start) {
+  const t = clamp((run.elapsed - start) / recruitment.settleTime, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function displayedSquadCount() {
+  if (!run.countChange || mode !== 'running' || reducedMotion.matches) return run.count;
+  const {from, time} = run.countChange;
+  return from + (run.count - from) * settleProgress(time);
+}
+
+function changeSquadSize(delta, pickupX) {
+  const oldCount = run.count;
+  const from = displayedSquadCount();
+  const visibleChanges = Math.min(oldCount, crowdCamera.visibleSquadMax) !==
+    Math.min(oldCount + delta, crowdCamera.visibleSquadMax);
+  const previous = visibleChanges && !reducedMotion.matches ? squadFormation() : null;
+  run.count += delta;
+  run.countChange = delta > 0 ? {from, time: run.elapsed} : null;
+  if (!previous) return;
+
+  // Retarget from each soldier's current position, even during consecutive pickups.
+  run.formationMove = null;
+  const next = squadFormation();
+  const [entryX, entryY] = project(pickupX, 0);
+  run.formationMove = next.members.map((target, i) => {
+    const member = previous.members[i];
+    const arrival = Math.max(0, i - previous.members.length);
+    const x = member?.x ?? entryX;
+    const y = member?.y ?? entryY + next.rowGap * (target.row + recruitment.entryDepth);
+    return {
+      x: (x - target.x) / next.columnGap, y: (y - target.y) / next.rowGap,
+      scale: member?.scale ?? recruitment.entryScale,
+      time: run.elapsed + arrival * recruitment.arrivalSpacing,
+    };
+  });
+}
+
 function squadFormation() {
   const [centerX, centerY] = project(run.x, 0);
   const size = clamp(width / 510, 0.85, 1.24) * (1 - crowdCamera.widen * run.crowd);
@@ -1662,13 +1701,17 @@ function squadFormation() {
   const members = Array.from({length: count}, (_, index) => {
     const row = Math.floor(index / columns);
     const rowCount = Math.min(columns, count - row * columns);
+    const move = run.formationMove?.[index];
+    const remaining = move && !reducedMotion.matches ? 1 - settleProgress(move.time) : 0;
     return {
-      x: formationX + ((index % columns) - (rowCount - 1) / 2) * columnGap + (row%2 ? stagger : -stagger),
-      y: centerY + row * rowGap,
+      scale: 1 - (1 - (move?.scale ?? 1)) * remaining,
+      joining: remaining,
+      x: (move?.x ?? 0) * columnGap * remaining + formationX + ((index % columns) - (rowCount - 1) / 2) * columnGap + (row%2 ? stagger : -stagger),
+      y: centerY + (row + (move?.y ?? 0) * remaining) * rowGap,
       row,
     };
   });
-  return {members, columns, size, radiusX: onStage() ? spacing * .26 : 8 * size, radiusY: onStage() ? spacing * .1 : 3.6 * size};
+  return {members, columns, size, columnGap, rowGap, radiusX: onStage() ? spacing * .26 : 8 * size, radiusY: onStage() ? spacing * .1 : 3.6 * size};
 }
 
 function bruteStrikeLane(enemy) {
@@ -2979,7 +3022,7 @@ function draw(time) {
     const recoil = sinceShot >= 0 && mode === 'running' ?
       Math.max(0, 1 - sinceShot / config.muzzleTime) : 0;
     figure(memberX, memberY,
-      size * 1.15, 'squad', mode === 'running' ? Math.sin(time * 13 + i) * Math.min(2.6, Math.abs(run.velocity) * 2) : 0, 0, recoil);
+      size * 1.15 * member.scale, 'squad', mode === 'running' ? Math.sin(time * 13 + i) * Math.min(2.6, Math.abs(run.velocity) * 2 + member.joining * 2) : 0, 0, recoil);
     if (row === 0 && recoil > 0.55) {
       const tip = [memberX + 2.5 * size, memberY - (39 - recoil) * size];
       line([tip[0] - 3 * size, tip[1] + size], [tip[0] + 3 * size, tip[1] - size], '#fff2b8', 2 * size);
@@ -3015,12 +3058,12 @@ function draw(time) {
     const [px, py] = project(recruit.x, 0);
     ctx.save();
     ctx.globalAlpha = 1 - phase;
-    ctx.strokeStyle = recruit.count < 0 ? '#ff926f' : '#a8ffdc';
+    ctx.strokeStyle = '#ff926f';
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.ellipse(px, py - 3, 13 + phase * 32, 5 + phase * 11, 0, 0, Math.PI * 2);
     ctx.stroke();
-    ctx.fillStyle = recruit.count < 0 ? '#ffd4c6' : '#c5ffe7';
+    ctx.fillStyle = '#ffd4c6';
     ctx.font = '800 22px system-ui';
     ctx.textAlign = 'center';
     ctx.fillText(gateLabel(recruit.count), px, py - 32 - phase * 32);
