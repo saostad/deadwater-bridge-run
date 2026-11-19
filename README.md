@@ -42,3 +42,7 @@ Open the deployed HTTPS game URL on the phone.
 - **iPhone Safari** — Open **Share**, choose **Add to Home Screen**, enable **Open as Web App** if shown, and tap **Add**.
 
 Open the app online and wait for **Ready for offline play** below the controls. All 37 levels are then available offline on that device. After an update downloads, close every open game window and reopen Deadwater to use the new version.
+
+## Sound credits
+
+The large zombie and boss death vocals use AntumDeluge’s recordings for Stendhal. Deadwater uses takes 1, 2, and 4 at their original pitch, with a gain adjustment and MP3 encoding. [Undead Moans on OpenGameArt](https://opengameart.org/content/undead-moans) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)

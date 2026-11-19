@@ -31,14 +31,8 @@ const falls = {
 };
 
 const deathGroan = {
-  pitch: {hulk: 99, frost: 86, breaker: 82, boiler: 77, carrier: 108, boss: 70},
-  pitchVariation: .045, breath: .14, spacing: .76,
-  // The lips round off each "oh"; the final "ah" opens up and trails away.
-  syllables: [
-    {at: 0, length: .25, pitch: 1.08, end: .86, level: .80, mouth: [490, 960], tail: [360, 740]},
-    {at: .31, length: .23, pitch: 1.18, end: .91, level: .92, mouth: [510, 1010], tail: [375, 780]},
-    {at: .61, length: .55, pitch: 1.06, end: .64, level: 1, mouth: [750, 1290], tail: [560, 1090]},
-  ],
+  largeKinds: new Set(['hulk', 'frost', 'breaker', 'boiler', 'carrier']),
+  heavyTakes: [0, 1], bossTake: 2, victoryChimeGain: .45,
 };
 
 const difficulties = {
@@ -504,6 +498,8 @@ const soundStatus = byId('sound-status');
 const combatStatus = byId('combat-status');
 let audio, audioOutput, noiseBuffer, muted = false;
 
+let deathRecordingsReady, deathVoice;
+
 function updateAudioVolume() {
   if (audioOutput) audioOutput.gain.setValueAtTime(
     muted || mode === 'paused' ? 0 : config.audioVolume, audio.currentTime);
@@ -523,6 +519,8 @@ async function enableAudio() {
     }
     if (audio.state !== 'running') await audio.resume();
     soundStatus.hidden = true;
+    deathRecordingsReady ??= decodeDeathRecordings();
+    if (!await deathRecordingsReady) deathRecordingsReady = undefined;
   } catch (error) {
     console.error('Could not initialize game sound', error);
     soundStatus.textContent = 'Sound unavailable. Select Sound off, then Sound on to retry.';
@@ -534,61 +532,37 @@ function soundEnabled() {
   return !muted && audio?.state === 'running' && mode !== 'paused';
 }
 
-// A voiced buzz and a little air pass through the two moving vowel resonances.
-function playDeathGroan(pitch) {
-  const start = audio.currentTime;
-  const throat = audio.createOscillator();
-  throat.type = 'sawtooth';
-  const quiver = audio.createOscillator();
-  quiver.frequency.value = 7;
-  const depth = audio.createGain();
-  depth.gain.value = 26; // cents of pitch wobble on the sustained vowel
-  quiver.connect(depth).connect(throat.detune);
-  const breath = audio.createBufferSource();
-  breath.buffer = noiseBuffer;
-  breath.loop = true;
-  const air = audio.createGain();
-  air.gain.value = deathGroan.breath;
-  breath.connect(air);
-  const volume = audio.createGain();
-  volume.gain.setValueAtTime(0, start);
-  volume.connect(audioOutput);
-  const formants = [4, 7].map((resonance, i) => {
-    const filter = audio.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.Q.value = resonance;
-    const level = audio.createGain();
-    level.gain.value = i === 0 ? 1.9 : 1.25;
-    throat.connect(filter);
-    air.connect(filter);
-    filter.connect(level).connect(volume);
-    return {filter, level};
-  });
-  let stop;
-  for (const vowel of deathGroan.syllables) {
-    const onset = start + vowel.at;
-    stop = onset + vowel.length;
-    throat.frequency.setValueAtTime(pitch * vowel.pitch, onset);
-    throat.frequency.exponentialRampToValueAtTime(pitch * vowel.end, stop);
-    for (const [i, {filter}] of formants.entries()) {
-      filter.frequency.setValueAtTime(vowel.mouth[i], onset);
-      filter.frequency.exponentialRampToValueAtTime(vowel.tail[i], stop);
-    }
-    volume.gain.setValueAtTime(0, onset);
-    volume.gain.linearRampToValueAtTime(vowel.level, onset + vowel.length * .14);
-    volume.gain.linearRampToValueAtTime(vowel.level * .72, onset + vowel.length * .56);
-    volume.gain.linearRampToValueAtTime(0, stop);
+async function decodeDeathRecordings() {
+  try {
+    return await Promise.all(undeadRecordings.map(encoded => {
+      const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
+      return audio.decodeAudioData(bytes.buffer);
+    }));
+  } catch (error) {
+    console.error('Zombie death recordings could not be decoded', {fallback: true, using: 'impact sounds only', error});
+    soundStatus.textContent = 'Zombie voices unavailable. Other sounds are on. Toggle Sound off and on to retry.';
+    soundStatus.hidden = false;
+    return null;
   }
-  throat.onended = () => {
-    for (const node of [throat, quiver, depth, breath, air, volume]) node.disconnect();
-    for (const {filter, level} of formants) { filter.disconnect(); level.disconnect(); }
+}
+
+async function playDeathGroan(boss) {
+  const battle = run;
+  const samples = await deathRecordingsReady;
+  if (!samples || run !== battle || !soundEnabled()) return;
+  if (!boss && (deathVoice || mode !== 'running')) return;
+  const take = boss ? deathGroan.bossTake : deathGroan.heavyTakes[battle.nextDeathTake ?? 0];
+  if (!boss) battle.nextDeathTake = ((battle.nextDeathTake ?? 0) + 1) % deathGroan.heavyTakes.length;
+  deathVoice?.stop();
+  const voice = audio.createBufferSource();
+  deathVoice = voice;
+  voice.buffer = samples[take];
+  voice.connect(audioOutput);
+  voice.onended = () => {
+    voice.disconnect();
+    if (deathVoice === voice) deathVoice = undefined;
   };
-  throat.start(start);
-  quiver.start(start);
-  breath.start(start);
-  throat.stop(stop);
-  quiver.stop(stop);
-  breath.stop(stop);
+  voice.start();
 }
 
 // Each effect uses a short, decaying envelope. Offsets let tones form a chime.
@@ -713,7 +687,8 @@ function playSound(type, gain = 1) {
     case 'won':
     case 'lost': {
       const notes = type === 'won' ? [392, 494, 587, 784] : [294, 220, 147];
-      notes.forEach((frequency, index) => voice({frequency, duration: 0.34, volume: 0.18,
+      const mix = type === 'won' && run.bossGroan ? deathGroan.victoryChimeGain : 1;
+      notes.forEach((frequency, index) => voice({frequency, duration: 0.34, volume: 0.18 * mix,
         offset: index * 0.115, wave: 'triangle'}));
       break;
     }
@@ -757,6 +732,8 @@ function setEnvironment(level) {
 }
 
 function reset(nextMode) {
+  deathVoice?.stop();
+  deathVoice = undefined;
   selectRenderer();
   const level = levels[levelIndex];
   setEnvironment(level);
@@ -1096,10 +1073,9 @@ function defeatEnemy(enemy, sourceX, blast = false) {
   const fast = enemy.kind === 'runner' || enemy.kind === 'raider';
   const heavy = enemy.boss || enemy.kind === 'hulk' || enemy.kind === 'armored' || ['boiler', 'breaker', 'frost'].includes(enemy.kind);
   const seed = Math.sin(run.kills * 2.399 + enemy.x * 7);
-  const pitch = deathGroan.pitch[enemy.boss ? 'boss' : enemy.kind];
-  if (pitch && soundEnabled() && (enemy.boss || run.elapsed >= (run.nextGroan ?? 0))) {
-    playDeathGroan(pitch * (1 + seed * deathGroan.pitchVariation));
-    run.nextGroan = run.elapsed + deathGroan.spacing;
+  if (soundEnabled() && (enemy.boss || deathGroan.largeKinds.has(enemy.kind))) {
+    if (enemy.boss) run.bossGroan = true;
+    void playDeathGroan(enemy.boss);
   }
   const lateral = clamp((enemy.x - sourceX) * 2 + seed * .73, -1, 1);
   const forward = fast || (enemy.height ?? 0) > 0 || (!blast && seed < -.45);
