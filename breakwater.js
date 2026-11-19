@@ -9,12 +9,21 @@ const Breakwater = (() => {
   const lift = (w,h) => w/h * cameraHalfScreen() / camera.halfRoad * camera.vertical;
   function project(x,z,w,h,y=0) {
     const range = distance();
-    const q=1+z/range-y*camera.eyeSlope/(range * camera.metresPerDepth);
-    return [w*(.5+x*cameraHalfScreen()/q), h*(camera.feet-(rise()*z/range+lift(w,h)*y)/q),1/q];
+    const depth=Math.max(0,z-entranceCamera.anchoredDepth)/range;
+    const viewZ=z/range-run.entrance.dolly*depth;
+    const q=1+viewZ-y*camera.eyeSlope/(range * camera.metresPerDepth);
+    return [w*(.5+(x*cameraHalfScreen()+run.entrance.pan*depth)/q),
+      h*(camera.feet-(rise()*viewZ+lift(w,h)*y-run.entrance.pitch*depth)/q),1/q];
   }
   function ground(px,py,w,h) {
-    const d=(camera.feet-py/h)/rise(), q=1/(1-d);
-    return [(px/w-.5)*q*camera.halfRoad/cameraHalfScreen(), (q-1)*distance()*camera.metresPerDepth];
+    const dy=camera.feet-py/h, slope=rise(), range=distance();
+    const anchor=entranceCamera.anchoredDepth/range;
+    // Invert the same two depth ranges used by project() and the vertex shader.
+    const correction=dy>slope*anchor/(1+anchor) ? (slope-dy)*run.entrance.dolly+run.entrance.pitch : 0;
+    const z=(dy-correction*anchor)/(slope-dy-correction);
+    const depth=Math.max(0,z-anchor);
+    const x=(px/w-.5)*(1+z-run.entrance.dolly*depth)-run.entrance.pan*depth;
+    return [x*camera.halfRoad/cameraHalfScreen(), z*range*camera.metresPerDepth];
   }
   function muzzle(member,w,h,weapon='standard',barrel=0) {
     const [x,z] = ground(member.x,member.y,w,h);
@@ -36,6 +45,7 @@ const Breakwater = (() => {
   flat out float dissolve;
   uniform vec4 cam;
   uniform float cameraRise;
+  uniform vec4 entrance; // horizontal shift, pitch shift, anchored depth / range, dolly
   uniform vec2 offset;
   uniform float shadow;
   out vec3 color,world,normal;
@@ -132,6 +142,10 @@ const Breakwater = (() => {
       }
       if(info.z>0.){turn(p,n,vec3(0),-info.z*1.4);p.y*=1.-info.z*.5;}
     }
+    if(kind==9.){
+      p.x += p.y*pose.x;
+      p.y *= pose.y;
+    }
     p.x*=info.y; n.x/=info.y;
     if(kind==7.)p.z*=info.w;
     p=p*placement.w+placement.xyz;
@@ -152,8 +166,11 @@ const Breakwater = (() => {
       if(mod(info.w,4.)==3.)color*=vec3(1.35,1.29,1.04);
     }
     decal=tile==-2.?info.w:tile; tex=uv; mat=kind;
-    float zd=p.z/cam.z, q=1.+zd-p.y*cam.w/cam.z;
+    if(kind==9. && pose.z>0.)tex.x=1.-tex.x;
+    float depth=max(0.,p.z/cam.z-entrance.z);
+    float zd=p.z/cam.z-entrance.w*depth, q=1.+zd-p.y*cam.w/cam.z;
     vec2 ndc=vec2(2.*cam.x*p.x,2.*(zd*cameraRise+cam.y*p.y));
+    ndc+=2.*vec2(entrance.x,-entrance.y)*depth;
     ndc+=q*(offset+vec2(0.,${1-2*camera.feet}));
     gl_Position=vec4(ndc,q-.85,q);
   }`;
@@ -161,7 +178,8 @@ const Breakwater = (() => {
   precision highp float;
   in vec3 color,world,normal; in vec2 tex; in vec3 rest;
   flat in float decal; flat in float mat; flat in float dissolve;
-  uniform float shadow; uniform sampler2D atlas, surfaces; uniform bool textured;
+  uniform vec4 deckFinish;
+  uniform float shadow; uniform sampler2D atlas, surfaces, paintedSheet; uniform bool textured;
   out vec4 outColor;
   float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
   float mottling(vec2 p) {
@@ -170,6 +188,14 @@ const Breakwater = (() => {
   }
   void main(){
     if(dissolve>0. && fract(dot(floor(gl_FragCoord.xy),vec2(.75487767,.56984029)))<dissolve)discard;
+    if(mat==9.){
+      vec2 cell=vec2(mod(decal,4.),floor(decal/4.));
+      vec4 ink=texture(paintedSheet,(cell+vec2(tex.x,1.-tex.y))/vec2(4.,3.));
+      if(ink.a<.45)discard;
+      if(shadow>.5)outColor=vec4(.12,.14,.17,.34);
+      else outColor=vec4(mix(ink.rgb,vec3(.64,.75,.79),min(.2,max(0.,world.z)*.0028)),1.);
+      return;
+    }
     if(shadow>.5){outColor=vec4(.12,.14,.17,.34);return;}
     vec3 c=color, n=normalize(normal);
     if(mat==8.){
@@ -209,6 +235,17 @@ const Breakwater = (() => {
       float edge=min(seam.x,seam.y), aa=max(.002,fwidth(grid.y)*.65);
       float grain=hash(floor(world.xz*125.))-.5;
       float wear=mottling(world.xz*3.)+.45*mottling(world.xz*13.);
+      if(deckFinish.w>0.){
+        c=deckFinish.rgb;
+        float stripe=1.-smoothstep(.022,.055,abs(abs(world.x)-.12));
+        c=mix(c,vec3(.93,.68,.29),.68*stripe);
+        if(deckFinish.w>=3.){
+          vec2 holes=world.xz/vec2(.21,.31);
+          float opening=smoothstep(.14,.29,length(fract(holes)-.5));
+          float detail=1.-smoothstep(.15,.8,max(fwidth(holes.x),fwidth(holes.y)));
+          c*=mix(1.,.55+.45*opening,detail);
+        }
+      }
       c*=.92+.072*hash(floor(grid))+.046*wear+.018*grain;
       c-=vec3(.06,.045,.031)*smoothstep(.71,.96,mottling(world.xz*1.25));
       c*=mix(.73,1.,smoothstep(.004-aa,.009+aa,edge));
@@ -281,14 +318,36 @@ const Breakwater = (() => {
     for(const tool of Object.keys(bossWeapons))models['tool-'+tool]=BreakwaterModels.bossTool(tool);
     CampaignScenery.build(make);
     const face=(m,w,y,h,z,tile,lean=0) => m.quad([-w/2,y,z],[-w/2,y+h,z+lean],[w/2,y+h,z+lean],[w/2,y,z],0xffffff,0,tile);
+    for(const kind of encounterTuning.roster)make(kind,m=>face(m,1,-5/256,1,0,-2));
+    make('icePatch',m=>{
+      m.loft(0,0,[[0,.90,1.02],[.035,1,1],[.055,.72,.63]],0x9de4f6,0,7);
+      m.box(-.15,.057,0,.68,.014,.035,0xe8ffff);
+    });
+    make('seedPod',m=>{
+      m.loft(0,0,[[0,.20,.17],[.12,.36,.27],[.38,.32,.22],[.65,.12,.09],[.72,.025,.025]],0x9bad37,0,9);
+      m.loft(.01,-.17,[[.12,.07,.04],[.34,.12,.11],[.55,.045,.04]],0xe6ff6c,0,7);
+    });
     make('acid',m=>m.loft(0,0,[[-.16,.07,.09],[-.04,.16,.18],[.09,.145,.16],[.16,.05,.07]],0xbce863,0,9));
     make('contact',m=>m.quad([-.44,0,-.31],[-.44,0,.31],[.44,0,.31],[.44,0,-.31],0x352e27));
     make('warning',m=>m.quad([-1,0,0],[-1,0,1],[1,0,1],[1,0,0],0xec735a));
-    make('road',m=>m.box(0,-.24,83,9.72,.48,188,0xc5bcae));
-    make('apron',m=>m.box(0,-.24,0,9.72,.48,22,0xc5bcae));
+    // Split long deck surfaces at the camera pivot so the depth buffer follows the
+    // same projection as feet, shadows and piers on either side of that point.
+    const pivot=entranceCamera.anchoredDepth*camera.metresPerDepth;
+    function deckBox(m,y,w,h,near,far,color){
+      const ends=near<pivot && pivot<far ? [pivot,far] : [far];
+      for(const end of ends){
+        m.box(0,y,(near+end)/2,w,h,end-near,color);
+        near=end;
+      }
+    }
+    make('road',m=>deckBox(m,-.24,9.72,.48,-11,177,0xc5bcae));
+    make('apron',m=>deckBox(m,-.24,9.72,.48,-11,11,0xc5bcae));
     make('span',m=>m.box(0,-.24,94,1,.48,166,0xc5bcae));
     make('divider',m=>m.box(0,.10,94,.10,.20,166,0xabb1a8));
-    make('curb',m=>{m.box(0,.115,83,.20,.23,188,0xbbbab0);m.box(0,.241,83,.21,.027,188,0xe4dfcf);});
+    make('curb',m=>{
+      deckBox(m,.115,.20,.23,-11,177,0xbbbab0);
+      deckBox(m,.241,.21,.027,-11,177,0xe4dfcf);
+    });
     make('pier',m=>{m.box(0,-1.81,0,.63,3,.85,0x808986);m.box(0,-.44,0,.93,.28,1.18,0x787571);});
     for(const [i,name] of signs.entries()) make(name,m=>{
       const panel=i<4, w=panel?2*camera.halfRoad*armory.panelAim:1.28, h=panel?1.47:.91;
@@ -360,7 +419,7 @@ const Breakwater = (() => {
     if(!gl.getProgramParameter(program,gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
     gl.useProgram(program); gl.enable(gl.DEPTH_TEST);
     const uniform=name=>gl.getUniformLocation(program,name);
-    const uniforms={cam:uniform('cam'), cameraRise:uniform('cameraRise'),offset:uniform('offset'),shadow:uniform('shadow')};
+    const uniforms={deckFinish:uniform('deckFinish'),cam:uniform('cam'), cameraRise:uniform('cameraRise'),entrance:uniform('entrance'),offset:uniform('offset'),shadow:uniform('shadow')};
     const texture=gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D,texture);
     gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlasCanvas());
     gl.generateMipmap(gl.TEXTURE_2D);
@@ -389,6 +448,12 @@ const Breakwater = (() => {
     };
     materialImage.src=characterMaterials;
     gl.activeTexture(gl.TEXTURE0);
+    const blankSheet=gl.createTexture();
+    gl.activeTexture(gl.TEXTURE2);gl.bindTexture(gl.TEXTURE_2D,blankSheet);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,1,1,0,gl.RGBA,gl.UNSIGNED_BYTE,new Uint8Array(4));
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform1i(uniform('paintedSheet'),2);
+    const paintedTextures=new Map();
     const groups={};
     function attr(index,n,stride,offset) {
       gl.enableVertexAttribArray(index); gl.vertexAttribPointer(index,n,gl.FLOAT,false,stride*4,offset*4);
@@ -415,6 +480,11 @@ const Breakwater = (() => {
     }
     function batch(name) {
       const g=groups[name]; if(!g.list.length) return;
+      if(paintedTextures.has(name)){
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D,paintedTextures.get(name));
+        gl.activeTexture(gl.TEXTURE0);
+      }
       gl.bindVertexArray(g.vao);
       gl.drawElementsInstanced(gl.TRIANGLES,g.vertices,gl.UNSIGNED_SHORT,0,g.list.length/16);
     }
@@ -426,7 +496,7 @@ const Breakwater = (() => {
       const X=camera.halfRoad,Z=camera.metresPerDepth;
       for(const g of Object.values(groups))g.list.length=0;
       CampaignScenery.place(level.scenery,put);
-      if (level.split || level.siege) {
+      if (!level.chapter && (level.split || level.siege)) {
         put('apron',0,0,0,1,5);
         const inner=level.siege?1.91:.33, outer=4.86;
         for(const side of [-1,1]){
@@ -451,6 +521,7 @@ const Breakwater = (() => {
         const tile = g.count < 0 ? 56 - g.count : g.count === 1 ? 6 : 40 + g.count;
         put(g.count < 0 ? 'penalty' : 'recruit',g.x*X,truck?1.23:0,g.z*Z,1,0,0,0,0,0,1,0,tile);
       }
+      for(const bed of level.beds ?? [])put('plantBed',bed.x*X,0,bed.z*Z);
       for(const b of run.barricades)if(visible(b))put(b.kind==='debris'?'debris':'crate',b.x*X,0,b.z*Z);
       for(const c of run.caches)if(!c.passed && visible(c)){
         const drum=c.kind==='drum';
@@ -459,9 +530,29 @@ const Breakwater = (() => {
         put('number',c.x*X,top,c.z*Z-(drum?.55*camera.drumScale:.13),drum?1.65*camera.drumScale:.90,0,0,0,0,0,1,0,8+c.health);
       }
       function zombie(e) {
+        if(e.phase==='tunnel')return;
+        const atlas=paintedAtlases.get(e.kind);
+        if(atlas?.naturalWidth){
+          if(!paintedTextures.has(e.kind)){
+            const texture=gl.createTexture();
+            gl.activeTexture(gl.TEXTURE2);
+            gl.bindTexture(gl.TEXTURE_2D,texture);
+            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlas);
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+            gl.activeTexture(gl.TEXTURE0);
+            paintedTextures.set(e.kind,texture);
+          }
+          const pose=paintedPose(e,time);
+          put(e.kind,e.x*X,0,e.z*Z,e.size,9,pose.lean,pose.stretch,Number(pose.mirror),
+            0,1,0,pose.frame,0,0,0,e.fade??0);
+          put('contact',e.x*X,.013,e.z*Z,e.size*(1-(e.fade??0)),8);
+          return;
+        }
         const poseTime=e.time ?? time;
         const runner=e.kind==='runner' || e.kind==='raider' || e.kind==='leaper', far=e.z>camera.detailedDistance;
         let type=e.kind==='shield'?'shieldBearer':e.kind;
+        if(encounterTuning.roster.includes(type))type='hulk';
         if(!type) type=e.siege?(far?'farSiege':'siege'):(far?'farWalker':'walker');
         if(far && type==='runner') type='farRunner';
         if(e.boss) type='boss';
@@ -489,6 +580,10 @@ const Breakwater = (() => {
         }
       }
       for(const e of run.enemies)if(e.health>0 && !e.passed && visible(e))zombie(e);
+      for(const ice of run.ice)if(visible(ice))
+        put('icePatch',ice.x*X,.025,ice.z*Z,campaignSpecialists.frost.iceRadius*X);
+      for(const pod of run.pods)if(pod.health>0 && visible(pod))
+        put('seedPod',pod.x*X,.03,pod.z*Z,1+.08*Math.sin(time*12));
       for(const glob of run.acid)put('acid',glob.x*X,glob.height,glob.z*Z,1,6);
       for(const e of run.fallen)if(visible(e))zombie(e);
       const gun=run.weapons.at(-1) ?? 'standard';
@@ -514,7 +609,8 @@ const Breakwater = (() => {
       for(const shot of run.shots){
         const start=shot.muzzle, aim=Math.min(1,shot.z/Math.max(1,shot.target?.z??shot.range));
         const x=start?start.x*(1-aim)+shot.x*X*aim:shot.x*X;
-        const y=start?start.y*(1-aim)+(1.16+(shot.target?.height??0))*aim:1.16;
+        const aimY=shot.target?.pod ? campaignSpecialists.carrier.podAimHeight : shot.target?.kind==='boiler' ? shot.target.size*enemyTypes.boiler.coreHeight : 1.16+(shot.target?.height??0);
+        const y=start?start.y*(1-aim)+aimY*aim:aimY;
         const fan=shot.weapon==='scatter'?shot.fan*weaponEffects.scatter.fan*Math.sin(Math.PI*aim):0;
         put('round-'+shot.weapon,x+fan,y,shot.z*Z+(start?.z??0)*(1-aim),1,6);
       }
@@ -528,8 +624,11 @@ const Breakwater = (() => {
       for(const g of Object.values(groups))if(g.list.length){
         gl.bindBuffer(gl.ARRAY_BUFFER,g.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(g.list),gl.DYNAMIC_DRAW);
       }
+      if(level.chapter)gl.uniform4f(uniforms.deckFinish,...level.chapter.deckTint,level.chapter.deckStyle);
+      else gl.uniform4f(uniforms.deckFinish,0,0,0,0);
       gl.uniform4f(uniforms.cam,cameraHalfScreen()/X,lift(w,h),distance()*Z,camera.eyeSlope);
       gl.uniform1f(uniforms.cameraRise,rise());
+      gl.uniform4f(uniforms.entrance,run.entrance.pan,run.entrance.pitch,entranceCamera.anchoredDepth/distance(),run.entrance.dolly);
       gl.uniform2f(uniforms.offset,shake[0]*2/w,-shake[1]*2/h);
       gl.stencilMask(255);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
       gl.enable(gl.STENCIL_TEST);gl.stencilFunc(gl.ALWAYS,1,255);gl.stencilOp(gl.KEEP,gl.KEEP,gl.REPLACE);

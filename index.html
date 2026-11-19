@@ -4,13 +4,22 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101518">
+<meta name="apple-mobile-web-app-title" content="Deadwater">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="assets/deadwater.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
 <title>Deadwater · Bridge Run</title>
 <link rel="stylesheet" href="style.css">
 <script defer src="assets/character-materials.js"></script>
+<script defer src="assets/boiler-husk-atlas.js"></script>
+<script defer src="assets/specialist-atlases.js"></script>
+<script defer src="specialist-encounters.js"></script>
 <script defer src="breakwater-models.js"></script>
+<script defer src="campaign-chapters.js"></script>
 <script defer src="campaign-scenery.js"></script>
 <script defer src="breakwater.js"></script>
 <script defer src="game.js"></script>
+<script defer src="pwa.js"></script>
 </head>
 <body>
 <main>
@@ -22,6 +31,7 @@
   <div class="layout">
     <section class="game" aria-label="Bridge Run game">
       <div class="game-field">
+        <img id="environment-art" alt="" hidden>
         <canvas id="breakwater" hidden aria-hidden="true"></canvas>
         <canvas id="scene" aria-label="A squad holding the near end of a bridge as zombies approach"></canvas>
         <div class="hud">
@@ -33,6 +43,7 @@
         </div>
         <p id="renderer-status" class="sound-status" role="status" hidden></p>
         <p id="art-status" class="sound-status" role="status" hidden></p>
+        <p id="environment-status" class="sound-status" role="status" hidden></p>
         <p id="sound-status" class="sound-status" role="status" hidden></p>
         <div class="overlay" id="overlay">
           <div class="dialog">
@@ -83,6 +94,9 @@
         <p class="eyebrow">CONTROLS</p>
         <div><span>Move left or right</span><span class="keys"><kbd>←</kbd> <kbd>→</kbd></span></div>
         <div><span>Pause</span><kbd>Esc</kbd></div>
+        <div><label for="entrance-camera">Entrance camera</label>
+          <select id="entrance-camera"><option value="auto">Auto</option><option value="off">Off</option></select>
+        </div>
         <p>On touchscreens, drag sideways to steer. Shoot weapon panels to change your loadout. Rescue crates add soldiers, armor crates absorb damage, and red shock drums clear nearby zombies.</p>
       </section>
       <section class="panel briefing">
@@ -91,6 +105,11 @@
         <p id="level-brief">Hold the bridge as the horde closes in. Line up with the blue gates for reinforcements and steer around incoming barricades.</p>
       </section>
       <button type="button" id="restart" class="restart">↻ <span>Restart level</span></button>
+      <section id="app-controls" class="panel" aria-label="App installation and offline play" hidden>
+        <button id="install-app" class="restart" type="button" hidden>Install Deadwater</button>
+        <p id="install-help" hidden></p>
+        <p id="offline-status" role="status"></p>
+      </section>
     </aside>
   </div>
 </main>

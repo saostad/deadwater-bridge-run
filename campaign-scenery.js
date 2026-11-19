@@ -53,6 +53,34 @@ const CampaignScenery = (() => {
       m.loft(0,0,[[-7,4.6,6.5],[-2.1,4.1,6],[-.6,3.7,5.6],[.3,3.45,5.3]],0xa56d54,0,7);
       m.loft(0,0,[[.29,3.5,5.3],[.60,3.39,5.2],[1.32,2.94,4.7]],0xc49370,0,7);
     });
+    make('beacon',m=>{
+      m.box(0,.28,0,.18,.56,.18,0x54626a);
+      m.loft(0,0,[[.48,.20,.20],[.54,.23,.23],[.67,.18,.18],[.70,.1,.1]],0xffc473,0,8);
+    });
+    make('platformLamp',m=>{
+      m.box(0,1.23,0,.10,2.46,.10,0x514a3e);
+      m.box(0,2.40,0,.38,.48,.30,0xffce84);
+      m.box(0,2.68,0,.46,.10,.36,0x5d5145);
+      for(const x of [-.16,.16])m.box(x,2.40,-.155,.035,.48,.04,0x625744);
+    });
+    make('plantBed',m=>{
+      m.box(0,.15,0,1.05,.30,4.8,0x706f57);
+      m.box(0,.31,0,.91,.045,4.55,0x483e31);
+      for(let i=0;i<18;i++){
+        const x=Math.sin(i*2.4)*.35,z=(i/17-.5)*4.4,side=i%2?1:-1;
+        const a=[x,.32,z], tip=[x+side*.32,.76+.22*Math.cos(i),z+.22];
+        m.triangle(a,[x+side*.15,.60,z-.08],tip,0x586e36,0);
+        m.triangle(a,tip,[x+side*.16,.65,z+.18],0x8a9a4c,0);
+      }
+    });
+    make('steamMain',m=>{
+      m.sleeve([0,.48,-2.8],[0,.48,2.8],.32,.32,0x935c40,0);
+      for(const z of [-2.5,0,2.5]){
+        m.sleeve([0,.48,z-.09],[0,.48,z+.09],.39,.39,0x664a39,0);
+        m.box(0,.12,z,.78,.24,.35,0x645e52);
+      }
+      m.loft(0,0,[[.68,.13,.13],[.99,.13,.13],[1.01,.32,.32],[1.08,.32,.32]],0xb87749,0,10);
+    });
     make('truck',m=>{
       m.box(0,.50,0,1.48,.38,2.23,0x344047);
       m.box(0,.91,-.60,1.51,.63,.84,0x47808a);
@@ -66,6 +94,10 @@ const CampaignScenery = (() => {
     });
   }
   const sets={
+    snowline:[['beacon',-4.66,4],['beacon',4.66,4],['beacon',-4.66,14],['beacon',4.66,14],['beacon',-4.66,28],['beacon',4.66,28]],
+    rail:[['platformLamp',-5.0,10],['platformLamp',5.0,17],['platformLamp',-5.0,30]],
+    canopy:[['plantBed',-5.0,8],['plantBed',5.0,15],['plantBed',-5.0,29]],
+    cinder:[['steamMain',-4.98,6],['steamMain',4.98,16],['steamMain',-4.98,28],['steamMain',4.98,34]],
     harbor:[['crane',-7,22],['cargo',8,32],['cargo',-9,47]],
     freight:[['cargo',-7,15],['cargo',7,27],['cargo',7,27,1.4],['crane',-9,39]],
     floodlights:[['lamp',-5.1,12],['lamp',5.1,23],['cargo',-8,35]],

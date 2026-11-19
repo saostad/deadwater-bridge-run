@@ -18,6 +18,13 @@ const walker = {health: 2, pace: .74, siegePace: .76, siegeHealthyEvery: 2, stag
 const crowdCamera = {start: 32, full: 130, widen: .16, pullback: .34, pitch: .13,
   riseTime: 1.2, returnTime: 2.2, extraView: 42, visibleSquadMax: 20};
 
+// The entrance move pivots above the foreground, preserving squad framing and touch steering.
+const entranceCamera = {
+  bossDistance: 112, specialistDistance: 100, minDistance: 40, anchoredDepth: 10,
+  deploySettle: .42, easeIn: .72, hold: .32, easeOut: 1, quietTime: 6,
+  pitch: .075, pan: .23, dolly: .32, minimumShoulder: .9, specialistStrength: .84,
+};
+
 const falls = {
   drop: .54, heavyDrop: .76, hold: .58, fade: .34, gravity: 14,
   slideTime: .22, soundRange: 48, soundGap: .12, dustTime: .22,
@@ -89,6 +96,11 @@ function recruitLanes(groups, count) {
 const armoredWaveMix = {first: 4, interval: 16, siegeInterval: 34, incomingLimit: 2};
 
 const enemyTypes = {
+  ...campaignSpecialists,
+  boiler: {label: 'Boiler Husk', color: '#ffcd74', speed: 12, size: 2.85, health: 26, damage: 3, breach: 3,
+    ventRange: 36, ventTime: .88, openTime: 1.65, sealedTime: 1.3, coreDamage: 4,
+    coreHeight: .62,
+    tip: 'The Boiler Husk vents steam before its chest opens. Line up with the bright furnace for extra damage.'},
   leaper: {label: 'Leaper', color: '#78dcff', speed: 26, health: 7, size: 1.53, cadence: 14,
     trigger: 29, windup: .72, flight: .86, height: 2.65, radius: .17, strike: 2, recovery: .42,
     cue: 'Leaper crouching · clear the blue marks', tip: 'Leapers jump to the blue marks. Step sideways after they crouch.'},
@@ -345,12 +357,12 @@ const levels = [
   },
   {
     name: 'Dry Dock', scenery: 'dock', title: 'Hold the shipyard.', backdrop: drawDryDock, lighting: 'dusk',
-    objective: 'Armored groups follow the dockside cargo. Use breaks between them to grab reinforcements.',
+    objective: 'A Boiler Husk leads the dock workers. Watch for steam, then aim at its open furnace.',
     length: 930, breachLimit: 28,
     gates: [...recruitLanes([[16, -1], [159, 1], [310, -1], [490, 1], [649, -1], [806, 1]], 9),
       [394, 0.66, 6, 'truck'], [731, -0.66, 6, 'truck']],
     barricades: [[116, 0.59], [275, 0], [452, -0.60], [599, 0.54], [786, 0]],
-    specialists: [[204, 0.12, 'howler'], [328, -0.58, 'spitter'], [488, 0.6, 'leaper'], [671, 0.16, 'howler']],
+    specialists: [[55, 0, 'boiler'], [204, 0.12, 'howler'], [286, -0.22, 'boiler'], [328, -0.58, 'spitter'], [488, 0.6, 'leaper'], [671, 0.16, 'howler']],
     waves: [[83, 0, 40], [202, 0.05, 9, 'armored'], [259, -0.05, 47], [413, 0.01, 13, 'armored'],
       [478, 0.11, 49], [654, -0.07, 14, 'armored'], [729, 0.01, 55], [829, 0.06, 41]],
   },
@@ -412,6 +424,7 @@ const levels = [
       [490, -0.06, 3, 'hulk'], [548, 0.05, 4, 'shield'], [758, 0.50, 6, 'raider'],
       [814, 0.09, 5, 'shield'], [865, -0.05, 4, 'hulk']],
   },
+  ...buildChapterLevels(),
 ];
 let levelIndex = 0;
 
@@ -454,12 +467,22 @@ const pause = byId('pause');
 const bossResult = byId('boss-result');
 const difficultySelect = byId('difficulty');
 const levelSelect = byId('level-select');
+const chapterOptions = new Map();
 for (const [index, level] of levels.entries()) {
   const option = document.createElement('option');
   option.value = index;
   option.textContent = (index + 1) + '. ' + level.name;
-  levelSelect.append(option);
+  if (level.chapter) {
+    if (!chapterOptions.has(level.chapter)) {
+      const group = document.createElement('optgroup');
+      group.label = level.chapter.name;
+      levelSelect.append(group);
+      chapterOptions.set(level.chapter,group);
+    }
+    chapterOptions.get(level.chapter).append(option);
+  } else levelSelect.append(option);
 }
+const entranceSetting = byId('entrance-camera');
 const keys = new Set();
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -538,6 +561,21 @@ function playSound(type, gain = 1) {
     case 'equip':
       voice({frequency: 390,end:690,duration:.075,volume:.22,wave:'triangle'});
       voice({frequency: 810,end:1240,duration:.16,volume:.18,offset:.055});
+      break;
+    case 'iceCrack':
+      voice({frequency: 3900, duration: .08, volume: .15, noise: true});
+      voice({frequency: 1300, end: 370, duration: .12, volume: .1});
+      break;
+    case 'grate':
+      voice({frequency: 480, end: 180, duration: .13, volume: .16, wave: 'square'});
+      voice({frequency: 1800, duration: .1, offset: .08, volume: .12, noise: true});
+      break;
+    case 'seed':
+      voice({frequency: 360, end: 680, duration: .15, volume: .18, wave: 'triangle'});
+      break;
+    case 'boilerVent':
+      voice({frequency: 2650, duration: .42, volume: .24, noise: true});
+      voice({frequency: 185, end: 270, duration: .19, volume: .14, wave: 'triangle'});
       break;
     case 'howl':
       voice({frequency: 290, end: 115, duration: .31, volume: .15, wave: 'sawtooth'});
@@ -618,17 +656,50 @@ soundButton.addEventListener('click', () => {
   if (!muted) void enableAudio();
 });
 
+const environmentArt = byId('environment-art');
+const environmentStatus = byId('environment-status');
+environmentArt.addEventListener('error', () => {
+  const scene = environmentArt.dataset.scene;
+  if (!scene) return;
+  environmentArt.hidden = true;
+  console.error('Campaign backdrop unavailable', {scene, fallback:true, using:'chapter deck and scenery'});
+  environmentStatus.textContent = 'Backdrop unavailable. Showing the stage geometry. Reload to retry.';
+  environmentStatus.hidden = false;
+});
+function setEnvironment(level) {
+  const field = stageCanvas.parentElement;
+  const scene = level.chapter ? level.scenery : '';
+  if (scene === (environmentArt.dataset.scene ?? '')) return;
+  environmentStatus.hidden = true;
+  environmentArt.dataset.scene = scene;
+  environmentArt.hidden = !scene;
+  if (scene) {
+    field.dataset.environment = scene;
+    field.style.backgroundColor = level.chapter.surface[1];
+    environmentArt.src = 'assets/environments/' + scene + '.webp';
+  } else {
+    delete field.dataset.environment;
+    field.style.backgroundColor = '';
+    environmentArt.removeAttribute('src');
+  }
+}
+
 function reset(nextMode) {
   selectRenderer();
   const level = levels[levelIndex];
+  setEnvironment(level);
   const difficultyName = difficultySelect.selectedOptions[0].textContent.toUpperCase();
   levelSelect.value = levelIndex;
   byId('level-number').textContent = 'LEVEL ' + String(levelIndex + 1).padStart(2, '0') + ' · ' + difficultyName;
   byId('level-name').textContent = level.name;
-  const kinds = new Set(level.specialists.map(([, , kind]) => kind));
-  byId('level-brief').textContent = [level.brief ?? level.objective, 'Steel helmets mark armored zombies that take several shots.', ...Array.from(kinds, kind => enemyTypes[kind].tip)].join(' ');
   const difficulty = difficulties[difficultySelect.value];
-  const profile = bossRoster[levelIndex];
+  const gates = buildGates(level, difficulty);
+  const encounters = rollEncounters(level, levelIndex + 1, gates);
+  const kinds = new Set(encounters.map(([, , kind]) => kind));
+  byId('level-brief').textContent = [level.brief ?? level.objective, 'Steel helmets mark armored zombies that take several shots.', ...Array.from(kinds, kind => enemyTypes[kind].tip)].join(' ');
+  for (const kind of kinds) if (encounterTuning.roster.includes(kind)) loadPaintedAtlas(kind);
+  const profile = level.boss ?? bossRoster[levelIndex];
+  const bossTier = level.bossTier ?? levelIndex;
   for (const key of characterSprites.keys()) {
     if (key.startsWith('brute:')) characterSprites.delete(key);
   }
@@ -650,33 +721,36 @@ function reset(nextMode) {
       ...cache, health: armory.tuning[cache.kind].hits + armory.tuning[cache.kind].hitStep * difficulty.armor,
     })),
     elapsedDistance: 0, elapsed: 0, crowd: 0, runnerCueUntil: 0, x: 0, velocity: 0, count: level.startingSquad ?? config.startingSquad, kills: 0, breaches: 0,
+    entrance: {cue: null, pan: 0, pitch: 0, dolly: 0, specialistShown: false},
+    ice: [], pods: [], slowUntil: 0,
+    chapterSignals: (level.signals ?? []).map(([at,x])=>({at:at*level.length,x})),
     events: (levelIndex % 2 ? ['ambush', 'supply'] : ['supply', 'ambush']).map((kind, index) => ({
       kind, at: level.length * (index ? fieldEvents.second : fieldEvents.first),
     })),
     cooldown: 0, flash: 0, contactCooldown: 0, shots: [], impacts: [], fallen: [], recruits: [],
-    gates: buildGates(level, difficulty),
+    gates,
     barricades: level.barricades.map(([z, x, kind]) => ({z, x, kind, startX: x, distance: z})),
     enemies: level.waves.flatMap(wave => formWave(wave, level, difficulty)),
   };
-  run.specialists = level.specialists.map(([z, x, kind]) => {
+  run.specialists = encounters.map(([z, x, kind]) => {
     const type = enemyTypes[kind];
     return {z, x, kind, size: type.size, health: type.health + difficulty.armor, gaitOffset: z};
   });
   run.enemies.push(...run.specialists);
   run.acid = [];
   run.specialBursts = [];
-  const health = Math.ceil((charge.health + charge.healthPerLevel * levelIndex) * difficulty.bruteHealth);
-  const shield = Math.ceil((charge.shield + charge.shieldPerLevel * levelIndex) * difficulty.bruteHealth);
+  const health = Math.ceil((charge.health + charge.healthPerLevel * bossTier) * difficulty.bruteHealth);
+  const shield = Math.ceil((charge.shield + charge.shieldPerLevel * bossTier) * difficulty.bruteHealth);
   run.enemies.push({
     z: level.length + 14, x: 0, health, maxHealth: health, shield, maxShield: shield, boss: true,
-    size: charge.size + charge.sizePerLevel * levelIndex,
+    size: charge.size + charge.sizePerLevel * bossTier,
     profile, weapon, reach: weapon.reach, finish: bruteFinishes[levelIndex % bruteFinishes.length],
     windupTime: charge.warning * difficulty.warning * weapon.windup * (profile.tempo ?? 1),
-    swingTime: (charge.swingTime - levelIndex * charge.swingTimePerLevel) * difficulty.warning * weapon.swing,
-    attackWidth: (charge.width + charge.widthPerLevel * levelIndex) * difficulty.strikeWidth *
+    swingTime: (charge.swingTime - bossTier * charge.swingTimePerLevel) * difficulty.warning * weapon.swing,
+    attackWidth: (charge.width + charge.widthPerLevel * bossTier) * difficulty.strikeWidth *
       weapon.width * (profile.width ?? 1),
     recoveryTime: charge.recovery * difficulty.recovery * (profile.recovery ?? 1),
-    damage: charge.damage + Math.floor(levelIndex / 3) * charge.damagePerTier +
+    damage: charge.damage + Math.floor(bossTier / 3) * charge.damagePerTier +
       difficulty.bruteDamage + (profile.power ?? 0),
   });
   combatStatus.hidden = true;
@@ -687,6 +761,7 @@ function reset(nextMode) {
 
 function setMode(nextMode) {
   mode = nextMode;
+  if (mode === 'won' || mode === 'lost') clearEntranceCue();
   byId('equipped').hidden = !run.weapons.length || mode !== 'running';
   updateAudioVolume();
   if (mode === 'won' || mode === 'lost') playSound(mode);
@@ -713,7 +788,7 @@ function setMode(nextMode) {
   const stage = level.name.toUpperCase();
   const breached = run.breaches >= run.breachLimit;
   const messages = {
-    ready: [stage, level.title, level.objective, 'Deploy squad'],
+    ready: [level.chapter ? level.chapter.name.toUpperCase() + ' · ' + (level.part+1) + '/' + level.chapter.missions.length : stage, level.title, level.objective, 'Deploy squad'],
     paused: [stage, 'Paused.', 'Resume when your squad is ready.', 'Resume'],
     won: [canAdvance ? 'MISSION COMPLETE' : 'CAMPAIGN COMPLETE', canAdvance ? 'Bridge secured.' : 'All crossings secured.', run.count + ' survived · ' + run.kills + ' eliminated.', canAdvance ? 'Next level' : 'Play again'],
     lost: ['MISSION FAILED', breached ? 'Bridge breached.' : 'Squad lost.',
@@ -947,7 +1022,7 @@ function defeatEnemy(enemy, sourceX, blast = false) {
   run.kills++;
   const type = enemyTypes[enemy.kind];
   const fast = enemy.kind === 'runner' || enemy.kind === 'raider';
-  const heavy = enemy.boss || enemy.kind === 'hulk' || enemy.kind === 'armored';
+  const heavy = enemy.boss || enemy.kind === 'hulk' || enemy.kind === 'armored' || ['boiler', 'breaker', 'frost'].includes(enemy.kind);
   const seed = Math.sin(run.kills * 2.399 + enemy.x * 7);
   const lateral = clamp((enemy.x - sourceX) * 2 + seed * .73, -1, 1);
   const forward = fast || (enemy.height ?? 0) > 0 || (!blast && seed < -.45);
@@ -1027,7 +1102,7 @@ function unlockCache(cache) {
     case 'drum':
       run.blast = {x: cache.x, z: cache.z, time: run.elapsed};
       for (const enemy of run.enemies) {
-        if (enemy.boss || enemy.passed || enemy.health <= 0 || enemy.z < 0 ||
+        if (enemy.boss || enemy.passed || enemy.phase === 'tunnel' || enemy.health <= 0 || enemy.z < 0 ||
             Math.abs(enemy.z - cache.z) > armory.drumDepth || Math.abs(enemy.x - cache.x) > armory.drumWidth) continue;
         enemy.health = Math.max(0, enemy.health - armory.drumPower);
         enemy.lastHit = run.elapsed;
@@ -1119,6 +1194,45 @@ function advanceSpecial(enemy) {
   return true;
 }
 
+// Both renderers select art from the same simulation clock and gameplay state.
+function advanceBoiler(enemy) {
+  const type = enemyTypes.boiler;
+  if (enemy.z > type.ventRange || enemy.phaseUntil > run.elapsed) return;
+  if (enemy.phase === 'vent') {
+    enemy.phase = 'open';
+    enemy.phaseUntil = run.elapsed + type.openTime * run.difficulty.warning;
+    combatNotice('Furnace open · line up for ×' + type.coreDamage + ' damage');
+  } else if (enemy.phase === 'open') {
+    enemy.phase = 'sealed';
+    enemy.phaseUntil = run.elapsed + type.sealedTime;
+  } else {
+    enemy.phase = 'vent';
+    enemy.phaseUntil = run.elapsed + type.ventTime * run.difficulty.warning;
+    combatNotice('Boiler Husk venting');
+    playSound('boilerVent');
+  }
+}
+
+function paintedPose(enemy, time) {
+  const type = paintedMotion;
+  if (enemy.age !== undefined) {
+    const progress = Math.min(1, enemy.age / enemy.drop);
+    if (progress >= type.fallSwitch) return {frame: 11, lean: 0, stretch: 1, mirror: false};
+    return {frame: 8, lean: progress * .65, stretch: 1 - progress * progress * .75, mirror: false};
+  }
+  if (enemy.phase && abilityFrames[enemy.phase] !== undefined) {
+    const pulse = Math.sin(time * 13) * .012;
+    const frame = enemy.phase === 'stamp' && enemy.phaseUntil - time > campaignSpecialists.frost.stompTime / 2 ? 9 : abilityFrames[enemy.phase];
+    return {frame, lean: 0, stretch: 1 + pulse, mirror: false};
+  }
+  if (time - (enemy.recoilAt ?? -Infinity) < type.recoilTime)
+    return {frame: 8, lean: -.04, stretch: .98, mirror: false};
+  const phase = time * type.framesPerSecond + enemy.gaitOffset;
+  const step = Math.floor(phase) % 4;
+  return {frame: step + (run.crowd >= type.raisedCamera ? 4 : 0), mirror: enemy.kind === 'boiler' && step >= 2,
+    lean: Math.sin(phase * Math.PI / 2) * .035, stretch: 1 - .025 * Math.sin(phase * Math.PI) ** 2};
+}
+
 function walkerStagger(enemy, time) {
   return Math.max(0, 1 - (time - (enemy.lastHit ?? -Infinity)) / walker.staggerTime);
 }
@@ -1128,7 +1242,8 @@ function armoredEnemy(enemy) {
 }
 
 function shotCapacity(enemy) {
-  if (armoredEnemy(enemy)) return Math.min(enemy.health, armoredWaveMix.incomingLimit);
+  if (enemy.pod) return enemy.health;
+  if (armoredEnemy(enemy) || (enemy.kind === 'boiler' && enemy.phase !== 'open')) return Math.min(enemy.health, armoredWaveMix.incomingLimit);
   return enemy.kind || enemy.boss ? enemy.health + (enemy.shield ?? 0) : 1;
 }
 
@@ -1150,12 +1265,63 @@ function updateCrowdCamera(dt) {
   run.crowd += (target - run.crowd) * (1 - Math.exp(-dt / duration));
 }
 
+function clearEntranceCue() {
+  run.entrance.cue = null;
+  run.entrance.pan = 0;
+  run.entrance.pitch = 0;
+  run.entrance.dolly = 0;
+  lastStageFrame = undefined;
+}
+
+function updateEntranceCamera() {
+  const tuning = entranceCamera;
+  const view = run.entrance;
+  const boss = run.enemies.at(-1);
+  // Reserve enough time for the boss even on a fast, hard-mode approach.
+  const bossSpeed = config.enemySpeed * run.difficulty.pace * (boss.profile.pace ?? 1);
+  const duration = tuning.easeIn + tuning.hold + tuning.easeOut;
+  const reserve = tuning.bossDistance + bossSpeed * (duration + tuning.quietTime);
+  const enabled = !reducedMotion.matches && entranceSetting.value === 'auto';
+  function enter(enemy, distance) {
+    if (enemy.entranceSeen || enemy.z > distance || enemy.passed || enemy.health <= 0) return;
+    enemy.entranceSeen = true;
+    if (!enabled || enemy.z < tuning.minDistance || view.cue) return;
+    if (!enemy.boss) {
+      if (view.specialistShown || boss.z <= reserve || run.flash > 0 || run.acid.length) return;
+      view.specialistShown = true;
+    }
+    // Choose one shoulder on entry, including for enemies coming straight down the center.
+    const shoulder = (enemy.x < 0 ? -1 : 1) * Math.max(tuning.minimumShoulder, Math.abs(enemy.x));
+    view.cue = {start: Math.max(run.elapsed, tuning.deploySettle), shoulder,
+      strength: enemy.boss ? 1 : tuning.specialistStrength};
+  }
+  enter(boss, tuning.bossDistance);
+  if (!view.specialistShown) {
+    for (const enemy of run.specialists) enter(enemy, tuning.specialistDistance);
+  }
+  if (!view.cue) return;
+  const age = run.elapsed - view.cue.start;
+  if (age >= duration) {
+    clearEntranceCue();
+    return;
+  }
+  const t = clamp(Math.min(age / tuning.easeIn, (duration - age) / tuning.easeOut), 0, 1);
+  const weight = t * t * (3 - 2 * t) * view.cue.strength;
+  view.dolly = tuning.dolly * weight;
+  view.pan = -tuning.pan * view.cue.shoulder * weight;
+  view.pitch = tuning.pitch * weight;
+}
+
+entranceSetting.addEventListener('change', clearEntranceCue);
+reducedMotion.addEventListener('change', clearEntranceCue);
+
 function step(dt) {
   const level = levels[levelIndex];
   const direction = Number(keys.has('ArrowRight') || keys.has('KeyD')) -
     Number(keys.has('ArrowLeft') || keys.has('KeyA'));
-  const targetVelocity = drag ? clamp((drag.target - run.x) * config.response, -config.steering, config.steering)
-    : direction * config.steering;
+  const steering = config.steering * (run.slowUntil > run.elapsed ? campaignSpecialists.frost.steeringScale : 1);
+  const targetVelocity = drag ? clamp((drag.target - run.x) * config.response, -steering, steering)
+    : direction * steering;
   run.velocity += (targetVelocity - run.velocity) * (1 - Math.exp(-config.response * dt));
   run.x = clamp(run.x + run.velocity * dt, -config.edge, config.edge);
   run.elapsed += dt;
@@ -1213,7 +1379,9 @@ function step(dt) {
           barricade.kind === 'debris' ? (level.debrisName ?? 'Storm debris') : 'Barricade collision');
   }
 
+  if (level.chapter) updateChapterHazards(level, formation);
   updateAcid(dt);
+  updateEncounterObjects(travel, formation);
   run.specialBursts = run.specialBursts.filter(burst => run.elapsed - burst.time < config.fallTime);
   for (const enemy of run.enemies) {
     if (enemy.health <= 0 || enemy.passed) continue;
@@ -1222,11 +1390,17 @@ function step(dt) {
       continue;
     }
     const type = enemyTypes[enemy.kind];
+    if (enemy.kind === 'boiler') {
+      advanceBoiler(enemy);
+      if (enemy.phase === 'vent' || enemy.phase === 'open') continue;
+    }
+    if (campaignSpecialists[enemy.kind] && advanceCampaignSpecialist(enemy, dt)) continue;
     if (enemy.restUntil > run.elapsed || (type?.trigger && advanceSpecial(enemy))) continue;
     const haste = enemy.ralliedUntil > run.elapsed ? enemyTypes.howler.rallySpeed : 1;
     const previousZ = enemy.z;
     if (enemy.laneX !== undefined) {
       enemy.x = enemy.laneX + (type?.weave ?? horde.straggle) * Math.sin(run.elapsed * 3 + enemy.gaitOffset);
+      if (level.beds?.length) routeAroundBeds(enemy,level.beds);
     }
     const staggered = !type && walkerStagger(enemy, run.elapsed) > 0;
     const walkPace = type ? 1 : (enemy.siege ? walker.siegePace : walker.pace);
@@ -1239,7 +1413,7 @@ function step(dt) {
     }
     if (enemy.z <= 0 && Math.abs(enemy.x - run.x) < config.contactWidth &&
         !run.contactCooldown && !enemy.attacked) {
-      damage(type?.damage ?? 1, enemy.kind === 'hulk' ? 'Hulk attack' : 'Zombie attack');
+      damage(type?.damage ?? 1, encounterTuning.roster.includes(enemy.kind) ? type.label + ' strike' : enemy.kind === 'hulk' ? 'Hulk attack' : 'Zombie attack');
       enemy.attacked = true;
       run.contactCooldown = config.contactInterval;
     }
@@ -1260,7 +1434,7 @@ function step(dt) {
     const shields = run.enemies.filter(enemy => enemy.kind === 'shield' && enemy.health > 0 &&
       !enemy.passed && enemy.z >= 0 && enemy.z < run.fireRange);
     const targets = run.enemies.filter(enemy =>
-      shotCapacity(enemy) > (enemy.incomingShots ?? 0) &&
+      enemy.phase !== 'tunnel' && shotCapacity(enemy) > (enemy.incomingShots ?? 0) &&
       (enemy.kind || enemy.boss || walkerStagger(enemy, run.elapsed) === 0) && enemy.health > 0 && !enemy.passed &&
       enemy.z >= 0 && enemy.z < run.fireRange &&
       (!enemy.boss || bossExposed(enemy)) &&
@@ -1270,7 +1444,9 @@ function step(dt) {
         Math.abs(shield.x - enemy.x) < enemyTypes.shield.coverWidth)));
     const caches = new Set(run.caches.filter(cache => !cache.passed && cache.z >= 0 && cache.z < run.fireRange &&
       cache.health > (cache.incomingShots ?? 0) && Math.abs(cache.x - run.x) < (cache.drop !== undefined ? armory.panelAim : cache.kind==='drum' && onStage() ? .82*Breakwater.camera.drumScale/Breakwater.camera.halfRoad : armory.aimWidth)));
-    const firingOrder = [...targets, ...caches].sort((a, b) => a.z - b.z);
+    const pods = run.pods.filter(pod => pod.z >= 0 && pod.z < run.fireRange && pod.health > (pod.incomingShots ?? 0) &&
+      Math.abs(pod.x - run.x) < aimWidth);
+    const firingOrder = [...targets, ...pods, ...caches].sort((a, b) => a.z - b.z);
     const closeTarget = firingOrder[0]?.z < armory.tuning.scatter.range;
     const volleys = Math.ceil(Math.sqrt(run.count)) + run.volleyBonus +
       (run.scatter && closeTarget ? armory.tuning.scatter.rounds : 0);
@@ -1298,14 +1474,28 @@ function step(dt) {
   run.shots = run.shots.filter(shot => {
     const target = shot.target;
     shot.z += config.shotSpeed * dt;
+    if (target?.phase === 'tunnel') {
+      target.incomingShots--;
+      shot.target = undefined;
+      return shot.z < shot.range;
+    }
     if (target && !target.passed && target.health > 0) {
       shot.x += (target.x - shot.x) * Math.min(1, dt * 6);
       if (shot.z >= target.z) {
         target.incomingShots--;
         const blocked = target.shield > 0;
-        const plated = !shot.cache && armoredEnemy(target);
+        const boiler = target.kind === 'boiler';
+        const coreOpen = boiler && target.phase === 'open';
+        const plated = !shot.cache && (armoredEnemy(target) || (boiler && !coreOpen));
+        if (target.phase === 'raise' && ++target.interruptHits >= campaignSpecialists.breaker.interruptHits) {
+          target.phase = undefined;
+          target.spent = true;
+          combatNotice('Strike interrupted · recruit gate saved');
+        }
+        if (encounterTuning.roster.includes(target.kind) && run.elapsed - (target.recoilAt ?? -Infinity) >= paintedMotion.recoilCooldown)
+          target.recoilAt = run.elapsed;
         armorHit ||= plated;
-        run.impacts.push({plated, x: target.x, z: target.z, height: target.height ?? 0, time: run.elapsed, blocked, weapon:shot.weapon});
+        run.impacts.push({plated, pod: target.pod, boilerSize: boiler ? target.size : 0, x: target.x, z: target.z, height: target.height ?? 0, time: run.elapsed, blocked, weapon:shot.weapon});
         hitThisStep = true;
         target.lastHit = run.elapsed;
         if (blocked) {
@@ -1316,9 +1506,13 @@ function step(dt) {
           }
           return false;
         }
-        target.health--;
+        const power = coreOpen ? enemyTypes.boiler.coreDamage :
+          target.phase === 'emerge' ? campaignSpecialists.crawler.emergeDamage : 1;
+        target.health = Math.max(0, target.health - power);
         if (target.health === 0) {
-          if (shot.cache) {
+          if (target.pod) {
+            combatNotice('Seed pod destroyed');
+          } else if (shot.cache) {
             unlockCache(target);
           } else {
             defeatEnemy(target, shot.originX);
@@ -1340,15 +1534,19 @@ function step(dt) {
     setMode('won');
   }
   updateCrowdCamera(dt);
+  if (mode === 'running') updateEntranceCamera();
   updateHud();
 }
 
 function project(x, z) {
   if (onStage()) return Breakwater.project(x, z, width, height);
   const distance = 44 * (1 + crowdCamera.pullback * run.crowd);
-  const scale = distance / (distance + z);
+  const depth = Math.max(0, z - entranceCamera.anchoredDepth) / distance;
+  const viewZ = z / distance - run.entrance.dolly * depth;
+  const scale = 1 / (1 + viewZ);
   const slope = .96 * (1 + crowdCamera.pitch * run.crowd);
-  return [width * (.48 + x * cameraHalfScreen() * scale), height * (.76 - slope * (1 - scale)),
+  return [width * (.48 + (x * cameraHalfScreen() + run.entrance.pan * depth) * scale),
+    height * (.76 - (slope * viewZ - run.entrance.pitch * depth) * scale),
     scale * (1 - crowdCamera.widen * run.crowd)];
 }
 
@@ -1405,6 +1603,7 @@ function touchesFormation(gate, previousZ, {members, radiusX, radiusY}) {
     const progress = currentY === previousY ? 0 : clamp((member.y - previousY) / (currentY - previousY), 0, 1);
     const scale = previousScale + progress * (currentScale - previousScale);
     const gateX = previousX + progress * (currentX - previousX);
+    if (gate.ice) return Math.abs(member.x - gateX) <= width * cameraHalfScreen() * scale * campaignSpecialists.frost.iceRadius + radiusX;
     const halfWidth=gate.kind==='drum' && onStage()
       ? .82*Breakwater.camera.drumScale*width*cameraHalfScreen()/Breakwater.camera.halfRoad*scale
       : gateHalfWidth(scale);
@@ -1671,9 +1870,10 @@ function drawBridge(time) {
   const near = -12;
   const [leftNear, rightNear] = [project(-1.17, near), project(1.17, near)];
   const floor = ctx.createLinearGradient(0, 0, 0, height);
-  floor.addColorStop(0, '#c2b8a5');
-  floor.addColorStop(0.74, '#9c998d');
-  floor.addColorStop(1, '#888d89');
+  const chapter = levels[levelIndex].chapter;
+  floor.addColorStop(0, chapter?.surface[0] ?? '#c2b8a5');
+  floor.addColorStop(0.74, chapter?.surface[0] ?? '#9c998d');
+  floor.addColorStop(1, chapter?.surface[1] ?? '#888d89');
 
   function finishDeck() {
     if (!deckPattern) return;
@@ -1707,7 +1907,7 @@ function drawBridge(time) {
     for (const lane of [-0.69, 0, 0.69]) {
       const [x, y, scale] = project(lane, z);
       const base = y + 52 * scale;
-      waterReflection(x, base, scale, time);
+      if (!chapter) waterReflection(x, base, scale, time);
       prism(x - 11 * scale, y + 4 * scale, x + 9 * scale, base, 6 * scale, 4 * scale,
         {top: '#93958d', front: '#798082', side: '#495a62'});
       ctx.fillStyle = '#263f48a6';
@@ -1718,10 +1918,16 @@ function drawBridge(time) {
     }
   }
   const split = levels[levelIndex].split;
-  deck(-0.96, split ? -0.08 : -0.42, junction, far, '#9b9f99');
-  deck(split ? 0.08 : 0.42, 0.96, junction, far, '#9b9f99');
-  if (!split) deck(-0.35, 0.35, junction, far, floor);
-  polygon([leftNear, rightNear, project(0.96, junction), project(-0.96, junction)], floor);
+  if (chapter) deck(-.96,.96,junction,far,floor);
+  else {
+    deck(-0.96, split ? -0.08 : -0.42, junction, far, '#9b9f99');
+    deck(split ? 0.08 : 0.42, 0.96, junction, far, '#9b9f99');
+    if (!split) deck(-0.35, 0.35, junction, far, floor);
+  }
+  const pivot = entranceCamera.anchoredDepth;
+  const pivotEdge = 1.17 + (.96 - 1.17) * (pivot - near) / (junction - near);
+  polygon([leftNear, rightNear, project(pivotEdge, pivot), project(.96, junction),
+    project(-.96, junction), project(-pivotEdge, pivot)], floor);
   finishDeck();
   for (let z = junction - 3; z > near; z -= 6) {
     const edge = 0.96 + (junction - z) * 0.006;
@@ -1766,9 +1972,10 @@ function drawBridge(time) {
 
   for (const side of [-1, 1]) {
     rail(side * 0.96, junction);
-    rail(side * (split ? 0.08 : 0.355), junction + 8);
+    if (!chapter) rail(side * (split ? 0.08 : 0.355), junction + 8);
     line(project(side * 1.17, near), project(side * 0.96, junction), '#45454d', 3);
   }
+  if (chapter) drawChapterLandmarks(levels[levelIndex].scenery);
 }
 
 function drawGate(gate) {
@@ -2314,7 +2521,29 @@ function bossMeter(enemy, x, barY, s) {
   ctx.fillText(label, left + span / 2, barY - 3 * s);
 }
 
+function drawPaintedEnemy(enemy, time) {
+  const atlas = paintedAtlases.get(enemy.kind);
+  if (!atlas?.naturalWidth) return false;
+  const [x, y, s] = project(enemy.x, enemy.z);
+  const pose = paintedPose(enemy, time);
+  const size = enemy.size * paintedMotion.canvasScale * s;
+  const tile = atlas.width / 4;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.globalAlpha = 1 - (enemy.fade ?? 0);
+  ctx.fillStyle = '#20222955';
+  ctx.beginPath();
+  ctx.ellipse(size * .09, 0, size * .33, size * .07, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.transform(pose.mirror ? -1 : 1, 0, -pose.lean, pose.stretch, 0, 0);
+  ctx.drawImage(atlas, (pose.frame % 4) * tile, Math.floor(pose.frame / 4) * tile,
+    tile, tile, -size / 2, -size * 251 / 256, size, size);
+  ctx.restore();
+  return true;
+}
+
 function drawFallenSprite(body) {
+  if (drawPaintedEnemy(body, body.time)) return;
   const [x,y,s]=project(body.x,body.z);
   const side=Math.sin(body.angle), along=Math.cos(body.angle);
   ctx.save();
@@ -2330,12 +2559,16 @@ function drawFallenSprite(body) {
 
 function drawSprites(time) {
   const objects = [
+    ...(levels[levelIndex].beds ?? []).map(item=>({item,paint:drawPlanter})),
+    ...run.ice.map(item => ({item, paint: drawIcePatch})),
+    ...run.pods.filter(item => item.health > 0).map(item => ({item, paint: drawSeedPod})),
     ...run.fallen.map(item => ({item,paint:drawFallenSprite})),
     ...run.gates.map(item => ({item, paint: drawGate})),
     ...run.caches.filter(cache => !cache.passed).map(item => ({item, paint: drawArmoryCache})),
     ...run.barricades.map(item => ({item, paint: drawBarricade})),
     ...run.enemies.filter(item => item.health > 0 && !item.passed).map(item => ({
       item, paint: enemy => {
+        if (enemy.phase === 'tunnel' || drawPaintedEnemy(enemy, time)) return;
         const [x, y, s] = project(enemy.x, enemy.z);
         const flinch = Math.max(0, 1 - (run.elapsed - (enemy.lastHit ?? -Infinity)) / config.impactTime);
         const stride = enemy.boss
@@ -2354,7 +2587,7 @@ function drawSprites(time) {
         } else if (enemy.kind === 'raider') {
           polygon([[x - 6 * s, y - 44 * s], [x, y - 39 * s], [x + 6 * s, y - 44 * s],
             [x, y - 49 * s]], '#e9a2f2');
-        } else if (enemy.kind === 'hulk') {
+        } else if (enemy.kind === 'hulk' || enemy.kind === 'boiler') {
           for (const side of [-1, 1]) {
             const shoulder = x + side * 9 * s;
             prism(shoulder - 5 * s, y - 45 * s, shoulder + 5 * s, y - 33 * s, 3 * s, 3 * s,
@@ -2411,6 +2644,10 @@ function drawSpecialWarnings(time) {
   for(const e of run.specialists){
     if(e.health>0 && !e.passed && e.attack && e.kind!=='howler')markLane(e.attack.targetX,e.kind);
   }
+  for (const e of run.specialists) {
+    if (e.kind === 'crawler' && e.health > 0 && (e.phase === 'dive' || e.phase === 'tunnel'))
+      drawCrawlerGrate(e.exitX, campaignSpecialists.crawler.exitDistance, time);
+  }
   for(const glob of run.acid)markLane(glob.targetX,'spitter');
   for(const burst of run.specialBursts){
     const progress=clamp((time-burst.time)/config.fallTime,0,1);
@@ -2431,10 +2668,12 @@ function drawSpecialSignals(time,stage) {
   for(const e of run.specialists){
     if(!e.health || e.passed || e.z>config.fireRange || e.z<0)continue;
     const type=enemyTypes[e.kind];
-    const elevation=(e.height??0)+2*e.size/horde.bodyScale;
+    const elevation=e.phase==='tunnel' ? 0 : encounterTuning.roster.includes(e.kind) ? e.size : (e.height??0)+2*e.size/horde.bodyScale;
     const [x,foot,s]=project(e.x,e.z);
-    const y=stage?Breakwater.project(e.x,e.z,width,height,elevation)[1]:foot-23*s*elevation;
-    const label=type.label;
+    const pixels=encounterTuning.roster.includes(e.kind) ? paintedMotion.canvasScale : 23;
+    const y=stage?Breakwater.project(e.x,e.z,width,height,elevation)[1]:foot-pixels*s*elevation;
+    const label=e.kind==='boiler' ? (e.phase==='open' ? 'CORE OPEN ×'+type.coreDamage :
+      e.phase==='vent' ? 'VENTING' : type.label) : specialistLabels[e.phase] ?? type.label;
     const w=ctx.measureText(label).width+12;
     const anchor=clamp(x,w/2+2,width-w/2-2);
     ctx.fillStyle='#142326ef';ctx.fillRect(anchor-w/2,y-15,w,17);
@@ -2501,7 +2740,8 @@ function drawBossDebris(impact, age) {
 function draw(time) {
   ctx.clearRect(0, 0, width, height);
   const stage = onStage();
-  if (!stage) drawWater(time);
+  const level = levels[levelIndex];
+  if (!stage && !level.chapter) drawWater(time);
   const footfall = run.bruteFootfall;
   const impact = run.bruteImpact;
   const stepAge = footfall ? time - footfall.time : Infinity;
@@ -2568,8 +2808,10 @@ function draw(time) {
   }
 
   if (impact && impactAge < charge.dustTime) drawBossDebris(impact, impactAge);
+  if (level.chapter && level.scenery !== 'snowline') drawChapterSignals(level,time);
   drawSpecialWarnings(time);
   if (!stage) drawSprites(time);
+  if (level.scenery === 'snowline') drawChapterSignals(level,time);
   drawSpecialSignals(time,stage);
   drawArmorReadouts(time,stage);
   for (const body of run.fallen) {
@@ -2599,7 +2841,9 @@ function draw(time) {
     const lane=shot.x+(fan+shot.barrel*(style.barrelOffset??0)*(1-progress))/Breakwater.camera.halfRoad;
     const [headX,headY,scale]=project(lane,shot.z);
     const [tailX,tailY,tailScale]=project(lane,Math.max(0,shot.z-style.length/Breakwater.camera.metresPerDepth));
-    const head=[headX,headY-19*scale], tail=[tailX,tailY-19*tailScale];
+    const aimHeight=shot.target?.pod ? 19+(11-19)*progress : shot.target?.kind==='boiler' ?
+      19+(shot.target.size*paintedMotion.canvasScale*enemyTypes.boiler.coreHeight-19)*progress : 19;
+    const head=[headX,headY-aimHeight*scale], tail=[tailX,tailY-aimHeight*tailScale];
     const radius=style.width*width/Breakwater.camera.halfRoad*scale;
     line(head,tail,shotColor(shot.weapon),Math.max(1.5,radius));
     line(head,tail,'#fff4ca',Math.max(.75,radius*.35));
@@ -2607,7 +2851,9 @@ function draw(time) {
   for (const impact of run.impacts) {
     const [px, py, scale] = project(impact.x, impact.z);
     const fade = 1 - (run.elapsed - impact.time) / config.impactTime;
-    const center = stage ? Breakwater.project(impact.x,impact.z,width,height,1.28 + impact.height) : [px, py - (15 + impact.height * 23) * scale];
+    const core = impact.pod ? campaignSpecialists.carrier.podAimHeight : impact.boilerSize * enemyTypes.boiler.coreHeight;
+    const center = stage ? Breakwater.project(impact.x,impact.z,width,height,core || 1.28 + impact.height)
+      : [px, py - (core ? core * paintedMotion.canvasScale : 15 + impact.height * 23) * scale];
     if (!impact.blocked && !impact.plated && impact.weapon !== 'standard') {
       const style=weaponEffects[impact.weapon];
       const radius=(1-fade)*scale*(4+style.recoil*7);
@@ -2732,7 +2978,8 @@ function togglePause() {
 
 action.addEventListener('click', () => {
   void enableAudio();
-  if (mode === 'paused') togglePause();
+  if (mode === 'ready') setMode('running');
+  else if (mode === 'paused') togglePause();
   else if (mode === 'won' && levelIndex + 1 < levels.length) {
     levelIndex++;
     reset('ready');

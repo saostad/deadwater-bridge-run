@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "shooting-zombies",
+  "compatibility_date": "2026-11-18",
+  "build": {
+    "command": "npm run build",
+    "watch_dir": ["assets", "scripts", "*.html", "*.css", "*.js", "*.webmanifest"]
+  },
+  "assets": {
+    "directory": "./dist"
+  }
+}
