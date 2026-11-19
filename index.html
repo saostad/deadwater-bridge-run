@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101518">
+<title>Deadwater · Bridge Run</title>
+<link rel="stylesheet" href="style.css">
+<script defer src="assets/character-materials.js"></script>
+<script defer src="breakwater-models.js"></script>
+<script defer src="campaign-scenery.js"></script>
+<script defer src="breakwater.js"></script>
+<script defer src="game.js"></script>
+</head>
+<body>
+<main>
+  <header class="brand">
+    <span class="mark" aria-hidden="true">✦</span>
+    <div><h1>DEADWATER</h1><p>BRIDGE RUN</p></div>
+  </header>
+
+  <div class="layout">
+    <section class="game" aria-label="Bridge Run game">
+      <div class="game-field">
+        <canvas id="breakwater" hidden aria-hidden="true"></canvas>
+        <canvas id="scene" aria-label="A squad holding the near end of a bridge as zombies approach"></canvas>
+        <div class="hud">
+          <div class="stage"><span id="level-number">LEVEL 01 · EASY</span><strong id="level-name">Breakwater</strong></div>
+          <div class="hud-actions">
+            <button id="sound" class="icon sound" type="button" aria-pressed="true">Sound on</button>
+            <button id="pause" class="icon" type="button" aria-label="Pause game" title="Pause game" disabled>Ⅱ</button>
+          </div>
+        </div>
+        <p id="renderer-status" class="sound-status" role="status" hidden></p>
+        <p id="art-status" class="sound-status" role="status" hidden></p>
+        <p id="sound-status" class="sound-status" role="status" hidden></p>
+        <div class="overlay" id="overlay">
+          <div class="dialog">
+            <p class="eyebrow" id="state-label">LEVEL 01 / BREAKWATER</p>
+            <h2 id="state-title">Hold the bridge.</h2>
+            <p id="state-description">Stop the horde before too many zombies cross the defense line.</p>
+            <p id="steering-hint" class="steering-hint">Use ← / → or drag sideways. Your squad fires automatically. Blue gates recruit soldiers. Red gates cost soldiers.</p>
+            <div class="deployment-settings">
+              <label class="difficulty" id="level-control">
+                <span>Level</span>
+                <select id="level-select"></select>
+              </label>
+              <label class="difficulty" id="difficulty-control">
+                <span id="difficulty-label">Difficulty</span>
+                <select id="difficulty">
+                  <option value="easy" selected>Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+            </div>
+            <div class="dialog-actions">
+              <button id="action" type="button">Deploy squad <span aria-hidden="true">→</span></button>
+              <button id="replay" type="button" hidden>Replay level</button>
+            </div>
+          </div>
+        </div>
+        <p id="boss-result" class="combat-status" role="status" hidden></p>
+      </div>
+      <div class="progress">
+        <p id="combat-status" class="combat-status" role="status" hidden></p>
+        <p id="equipped" role="status" hidden><canvas id="equipped-icon" width="120" height="48" aria-hidden="true"></canvas><strong id="equipped-name"></strong><span id="equipped-benefit"></span></p>
+        <div><span class="squad-readout"><strong id="squad">3</strong> SOLDIERS</span><span>WAVE <span id="percent">0%</span></span><span>BREACHES <span id="breaches">0 / 30</span></span></div>
+        <progress id="distance" max="100" value="0" aria-label="Wave progress"></progress>
+      </div>
+    </section>
+
+    <aside>
+      <section class="panel">
+        <p class="eyebrow">FIELD REPORT</p>
+        <dl>
+          <div><dt>Eliminations</dt><dd id="kills">00</dd></div>
+          <div><dt>Loadout</dt><dd id="loadout">Standard</dd></div>
+          <div><dt>Armor</dt><dd id="armor">0</dd></div>
+        </dl>
+      </section>
+      <section class="panel instructions">
+        <p class="eyebrow">CONTROLS</p>
+        <div><span>Move left or right</span><span class="keys"><kbd>←</kbd> <kbd>→</kbd></span></div>
+        <div><span>Pause</span><kbd>Esc</kbd></div>
+        <p>On touchscreens, drag sideways to steer. Shoot weapon panels to change your loadout. Rescue crates add soldiers, armor crates absorb damage, and red shock drums clear nearby zombies.</p>
+      </section>
+      <section class="panel briefing">
+        <p class="eyebrow">MISSION BRIEF</p>
+        <p><strong id="boss-name">The Breaker · Axe &amp; shield</strong></p>
+        <p id="level-brief">Hold the bridge as the horde closes in. Line up with the blue gates for reinforcements and steer around incoming barricades.</p>
+      </section>
+      <button type="button" id="restart" class="restart">↻ <span>Restart level</span></button>
+    </aside>
+  </div>
+</main>
+</body>
+</html>
