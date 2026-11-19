@@ -41,7 +41,7 @@ const chapters = {
   },
   cinder: {
     name: 'Cinderworks', intro: 'Cross the furnace floor.', deckStyle: 4, signature: 'boiler', surface: ['#968479','#71645c'], deckTint: [.68,.58,.51],
-    warning: 'Pressure building', sound: 'boilerVent', lead: 1.55, active: 1.1, reach: 75, halfWidth: .27, damage: 3,
+    warning: 'Pressure building', sound: 'boilerVent', lead: 1.55, active: 1.1, reach: 75, halfWidth: .27, damage: 3, exposureDamage: .5,
     missions: [
       ['Cinderworks','Dodge the hissing vents. Lure the boss onto a marked valve to rupture it and drain its shield.', 'Stokehand','hammer', [.1,-.12,.14,0], 'runner', [[.19,-.42],[.53,.43]]],
       ['Valve Gallery','Swap sides between steam bursts and watch the raiders coming down the other lane.', 'Valve Turner','mace', [-.42,.39,-.32,.2], 'raider', [[.14,-.47],[.35,.43],[.60,-.46]]],
@@ -53,16 +53,16 @@ const chapters = {
 };
 
 const chapterStages = [
-  {length: 850, column: 54, squad: 28, breaches: 48, support: 'leaper', boss: {recovery: 1.12}},
-  {length: 900, column: 60, squad: 30, breaches: 50, support: 'spitter', boss: {pace: 1.05}},
-  {length: 940, column: 67, squad: 32, breaches: 54, support: 'howler', boss: {width: 1.04, power: 1}},
-  {length: 980, column: 73, squad: 34, breaches: 57, support: 'leaper', boss: {tempo: .93, power: 1}},
-  {length: 1030, column: 80, squad: 36, breaches: 60, support: 'howler', boss: {followup: true, power: 2}},
+  {length: 850, column: 54, squad: 4, breaches: 48, support: 'leaper', boss: {recovery: 1.12}},
+  {length: 900, column: 60, squad: 4, breaches: 50, support: 'spitter', boss: {pace: 1.05}},
+  {length: 940, column: 67, squad: 4, breaches: 54, support: 'howler', boss: {width: 1.04, power: 1}},
+  {length: 980, column: 73, squad: 5, breaches: 57, support: 'leaper', boss: {tempo: .93, power: 1}},
+  {length: 1030, column: 80, squad: 5, breaches: 60, support: 'howler', boss: {followup: true, power: 2}},
 ];
 const chapterBalance = {
   waveAt: [.09,.25,.44,.61], waveGrowth: 8, chapterGrowth: 3, escortAt: [.28,.55],
   escortSize: {runner: 6, raider: 5, shield: 3, armored: 6, hulk: 2},
-  columns: 7, rowDepth: 3.7, columnWidth: .25, opening: 83, supportAt: .38,
+  columns: 4, rowDepth: 6.8, columnWidth: .38, opening: 128, supportAt: .38,
   gateAt: [.035,.21,.41,.59,.77], gatesPerGroup: 6, breakerAt: .52, reinforcementAt: .47,
   bossTier: 16,
 };
@@ -132,7 +132,7 @@ function updateChapterHazards(level, formation) {
       const exposed=formation.members.filter(p=>p.x+formation.radiusX>=left && p.x-formation.radiusX<=right);
       if (exposed.length) {
         signal.hit=true;
-        damage(Math.min(exposed.length,zone.damage+run.difficulty.hazardDamage),'Steam vent');
+        damage(Math.min(Math.ceil(exposed.length * zone.exposureDamage),zone.damage+run.difficulty.hazardDamage),'Steam vent');
       }
     }
   }
@@ -249,7 +249,7 @@ const encounterFlow = {
   plateHits: 4, heavyPace: .72, woundedArmorPace: .60, woundedRunnerPace: 1.4,
   shieldFlank: .36, alarmAt: .32, alarmRange: 64, alarmWindup: 2.2, alarmHits: 3,
   shutterAt: [.13,.54], shutterZ: 35, shutterWidth: .55, shutterTime: 4, queueDepth: 6, bellLead: 1, panelAim: .13,
-  choicePart: 2, choiceAt: .35, forkZ: 68, forkWidth: .36, forkDepth: 26, detourPace: .80,
+  choicePart: 2, choiceAt: .35, forkZ: 68, forkWidth: .49, forkSpread: .42, forkDepth: 26, detourPace: .80,
   pipeLane: .56, pipeWidth: .16, pipeShield: 22, steamTime: 1.2,
   drumAt: [.14,.44], rescueLane: .78, quietGap: .065,
 };

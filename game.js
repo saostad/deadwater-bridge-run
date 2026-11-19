@@ -2,7 +2,7 @@
 
 // Level distances, timings, and movement are measured in world units and seconds.
 const config = {
-  approachSpeed: 20, steering: 2.3, response: 11, startingSquad: 4,
+  approachSpeed: 20, steering: 2.3, response: 11, startingSquad: 3,
   edge: 0.86, viewDistance: 180, fireRange: 79, fireInterval: 0.14,
   aimWidth: 0.32, aimWidthPerColumn: 0.035, breachLine: -4, shotSpeed: 83, barricadeWidth: 0.26,
   barricadeDamage: 2, enemySpeed: 24, contactWidth: 0.23, contactInterval: 0.24,
@@ -10,7 +10,7 @@ const config = {
 };
 
 const gateBalance = {
-  recruitSpacing: 10, penaltyPositions: [.24, .41, .57, .72, .87],
+  recruitSpacing: 18, openingRecruitSpacing: 46, openingFraction: .18, penaltyPositions: [.24, .41, .57, .72, .87],
   penaltyLane: .72, laneClearance: 15, penaltyBase: 2, levelsPerPenalty: 6, penaltyMax: 5,
 };
 
@@ -40,24 +40,24 @@ const deathGroan = {
 const difficulties = {
   easy: {
     pace: 1, waveSize: 1, armor: 0, breaches: 1, gateEvery: 0, supplies: 1,
-    hazardDamage: 0, bruteHealth: 1, bruteDamage: 0, warning: 1, recovery: 1, strikeWidth: 1,
+    startingArmor: 3, hazardDamage: 0, bruteHealth: 1, bruteDamage: 0, warning: 1, recovery: 1, strikeWidth: 1,
   },
   medium: {
     pace: 1.09, waveSize: 1.06, armor: 1, breaches: 0.8, gateEvery: 6, supplies: 0.85,
-    hazardDamage: 1, bruteHealth: 1.3, bruteDamage: 1, warning: 0.88, recovery: 0.9, strikeWidth: 1.06,
+    startingArmor: 2, hazardDamage: 1, bruteHealth: 1.3, bruteDamage: 1, warning: 0.88, recovery: 0.9, strikeWidth: 1.06,
   },
   hard: {
     pace: 1.13, waveSize: 1.08, armor: 2, breaches: 0.7, gateEvery: 5, supplies: 0.65,
-    hazardDamage: 2, bruteHealth: 1.65, bruteDamage: 2, warning: 0.74, recovery: 0.8, strikeWidth: 1.12,
+    startingArmor: 1, hazardDamage: 2, bruteHealth: 1.65, bruteDamage: 2, warning: 0.74, recovery: 0.8, strikeWidth: 1.12,
   },
 };
 
 const armory = {
   drops: [
-    {at: 0.27, choices: ['rapid', 'spread']},
+    {at: 0.16, choices: ['rapid', 'spread']},
     {at: 0.6, choices: ['scatter', 'longshot']},
   ],
-  supplies: [{at: 0.15, kind: 'rescue'}, {at: 0.46, kind: 'armor'}, {at: 0.79, kind: 'drum'}],
+  supplies: [{at: 0.21, kind: 'rescue'}, {at: 0.46, kind: 'armor'}, {at: 0.79, kind: 'drum'}],
   lane: 0.66, aimWidth: 0.20, panelAim: .335, rescueCount: 5, armorCount: 3,
   drumDepth: 21, drumWidth: 0.44, drumPower: 3, drumCollision: 3, blastTime: 0.38,
   tuning: {
@@ -167,8 +167,9 @@ const fieldEvents = {first: 0.31, second: 0.61, supplyDistance: 38, bonus: 5,
 const storm = {warningDistance: 47, swing: 0.41, frequency: 0.13, damage: 4};
 
 const horde = {
-  columns: 5, rowDepth: 3.35, depthJitter: 2.4, halfWidth: 0.30,
-  splitHalfWidth: 0.25, innerEdge: 0.33, straggle: 0.014, bodyScale: 1.43,
+  scoutFraction: .16, scoutLimit: 8, waveFraction: .58, stagger: .18,
+  columns: 3, rowDepth: 6.5, depthJitter: 1.8, halfWidth: 0.43,
+  splitHalfWidth: 0.32, innerEdge: 0.65, straggle: 0.012, bodyScale: 1.43,
 };
 
 const siegeHorde = {
@@ -183,7 +184,7 @@ function buildGates(level, difficulty) {
     .filter(([z, x, count], index) => {
       if (count !== 1) return true;
       if (difficulty.gateEvery && (index + 1) % difficulty.gateEvery === 0) return false;
-      if (z - (lastRecruit.get(x) ?? -Infinity) < gateBalance.recruitSpacing) return false;
+      if (z - (lastRecruit.get(x) ?? -Infinity) < (z < level.length * gateBalance.openingFraction ? gateBalance.openingRecruitSpacing : gateBalance.recruitSpacing)) return false;
       lastRecruit.set(x, z);
       return true;
     })
@@ -213,11 +214,16 @@ function formWave([z, center, count, kind, halfWidth], level, difficulty) {
   const span = halfWidth ?? (outer || level.split ? horde.splitHalfWidth : horde.halfWidth);
   const left = outer || level.split || halfWidth ? center - span : Math.max(-horde.innerEdge, center - span);
   const right = outer || level.split || halfWidth ? center + span : Math.min(horde.innerEdge, center + span);
-  return Array.from({length: Math.ceil(count * difficulty.waveSize)}, (_, index) => {
+  const scouts = z < level.length * horde.scoutFraction;
+  const waveCount = kind ? count : scouts ? Math.min(horde.scoutLimit, count) : count * horde.waveFraction;
+  const total = Math.ceil(waveCount * difficulty.waveSize);
+  return Array.from({length: total}, (_, index) => {
     const row = Math.floor(index / columns);
-    const column = (index % columns + 0.5) / columns;
+    const rowSize = Math.min(columns, total - row * columns);
+    const column = (index % columns + 0.5) / rowSize;
     const offset = Math.sin(index * 2.399 + z);
-    const laneX = left + (right - left) * (column + offset / (2.6 * columns));
+    const stagger = row % 2 ? horde.stagger : -horde.stagger;
+    const laneX = left + (right - left) * (column + (stagger + offset / 2.6) / columns);
     const paceOffset = (index * 2.399 + z) % (Math.PI * 2);
     const interval = columnHorde ? armoredWaveMix.siegeInterval : armoredWaveMix.interval;
     const armored = !type && z >= (level.armorMixFrom ?? 0) && index % interval === armoredWaveMix.first;
@@ -236,7 +242,7 @@ function formWave([z, center, count, kind, halfWidth], level, difficulty) {
 const levels = [
   {
     name: 'Breakwater',
-    startingSquad: 3, armorMixFrom: 215,
+    startingSquad: 2, armorMixFrom: 215,
     weaponDrops: [{distance: 44, choices: ['rapid','spread']}, armory.drops[1]],
     weaponLane: .42,
     supplies: armory.supplies.map(supply => supply.kind === 'drum' ? {...supply, distance: 288} : supply),
@@ -245,7 +251,7 @@ const levels = [
     objective: 'Recruit soldiers through blue gates, then hold the bridge.',
     length: 760, breachLimit: 30,
     gates: [
-      [15, 0, 2],
+      [15, 0, 1],
       ...Array.from({length: 22}, (_, i) => [57 + i * 5, -0.66, 1]),
       ...Array.from({length: 10}, (_, i) => [181 + i * 7, 0.66, 1]),
       ...Array.from({length: 13}, (_, i) => [326 + i * 7, -0.66, 1]),
@@ -399,34 +405,34 @@ const levels = [
   {
     name: 'Blackwater Channel', title: 'Face the red column.', lighting: 'dawn',
     objective: 'Hold the center against the red horde. Fast runners break through on the flanks.',
-    length: 880, breachLimit: 55, startingSquad: 34, siege: {columns: 7, rowDepth: 5.4},
+    length: 880, breachLimit: 55, startingSquad: 4, siege: {columns: 4, rowDepth: 6.9},
     gates: [...recruitLanes([[13, -1], [153, -1], [291, -1], [433, -1], [580, -1], [724, -1]], 15),
-      [92, 0.66, 8, 'truck'], [368, 0.66, 9, 'truck'], [658, 0.66, 9, 'truck']],
+      [92, 0.66, 2, 'truck'], [368, 0.66, 9, 'truck'], [658, 0.66, 9, 'truck']],
     barricades: [[117, 0.55], [435, 0.56], [694, 0.54]],
     specialists: [[151, 0.08, 'howler'], [287, -0.52, 'leaper'], [329, 0.62, 'spitter'], [509, -0.1, 'howler'], [650, 0.52, 'leaper']],
-    waves: [[72, 0, 1001], [285, -0.50, 5, 'runner'], [612, 0.50, 6, 'runner'], [828, -0.53, 7, 'runner']],
+    waves: [[72, -.16, 8], [210, .20, 26], [410, -.2, 44], [665, .08, 68], [285, -0.50, 5, 'runner'], [612, 0.50, 6, 'runner'], [828, -0.53, 7, 'runner']],
   },
   {
     name: 'Red Tide', scenery: 'lock', title: 'Hold through the surge.', backdrop: drawTidalLock, lighting: 'storm',
     objective: 'Dodge sluice debris and stop the hulks in the center. Raiders weave in from the sides.',
-    length: 940, breachLimit: 64, startingSquad: 40, siege: {columns: 8, rowDepth: 5.5},
+    length: 940, breachLimit: 64, startingSquad: 4, siege: {columns: 4, rowDepth: 6.9},
     debrisName: 'Sluice debris',
     gates: [...recruitLanes([[13, 1], [175, 1], [331, 1], [493, 1], [645, 1], [792, 1]], 16),
-      [105, -0.66, 8, 'truck'], [411, -0.66, 9, 'truck'], [722, -0.66, 10, 'truck']],
+      [105, -0.66, 2, 'truck'], [411, -0.66, 9, 'truck'], [722, -0.66, 10, 'truck']],
     barricades: [[132, 0, 'debris'], [310, 0, 'debris'], [548, 0, 'debris'], [790, 0, 'debris']],
     specialists: [[141, -0.6, 'spitter'], [264, 0.05, 'howler'], [408, 0.58, 'leaper'], [452, -0.62, 'spitter'], [614, 0.05, 'howler'], [752, -0.52, 'leaper']],
-    waves: [[76, 0, 1160], [236, 0.05, 3, 'hulk'], [465, -0.54, 5, 'raider'],
+    waves: [[76, .16, 8], [218, -.20, 33], [438, .18, 51], [708, -.08, 76], [236, 0.05, 3, 'hulk'], [465, -0.54, 5, 'raider'],
       [496, -0.05, 4, 'armored'], [602, 0.09, 4, 'hulk'], [883, 0.55, 7, 'raider']],
   },
   {
     name: 'Iron Narrows', scenery: 'dock', title: 'Break the last column.', backdrop: drawDryDock, lighting: 'dusk',
     objective: 'Shield bearers cover the column. Break through them while watching for hulks and raiders.',
-    length: 1010, breachLimit: 73, startingSquad: 47, siege: {columns: 8, rowDepth: 4.95},
+    length: 1010, breachLimit: 73, startingSquad: 5, siege: {columns: 4, rowDepth: 6.9},
     gates: [...recruitLanes([[13, -1], [183, 1], [351, -1], [522, 1], [690, -1], [855, 1]], 17),
-      [95, 0.66, 10, 'truck'], [440, 0.66, 12, 'truck'], [756, 0.66, 12, 'truck']],
+      [95, 0.66, 3, 'truck'], [440, 0.66, 12, 'truck'], [756, 0.66, 12, 'truck']],
     barricades: [[294, -0.56], [620, 0.57], [848, -0.55]],
     specialists: [[137, 0.12, 'howler'], [252, -0.56, 'leaper'], [303, 0.63, 'spitter'], [454, -0.13, 'howler'], [562, 0.54, 'leaper'], [657, -0.62, 'spitter'], [766, 0.1, 'howler']],
-    waves: [[81, 0, 1392], [291, 0.08, 11, 'armored'], [521, -0.04, 13, 'armored'],
+    waves: [[81, -.16, 8], [214, .20, 38], [416, -.18, 58], [696, .08, 84], [291, 0.08, 11, 'armored'], [521, -0.04, 13, 'armored'],
       [744, 0.05, 15, 'armored'], [210, 0, 3, 'shield'], [404, -0.50, 5, 'raider'],
       [490, -0.06, 3, 'hulk'], [548, 0.05, 4, 'shield'], [758, 0.50, 6, 'raider'],
       [814, 0.09, 5, 'shield'], [865, -0.05, 4, 'hulk']],
@@ -805,7 +811,7 @@ function reset(nextMode) {
     difficulty,
     breachLimit: Math.ceil(level.breachLimit * difficulty.breaches),
     fireInterval: config.fireInterval, fireRange: config.fireRange, aimBonus: 0,
-    volleyBonus: 0, scatter: false, lastVolleyAt: -Infinity, armor: 0, weapons: [],
+    volleyBonus: 0, scatter: false, lastVolleyAt: -Infinity, armor: difficulty.startingArmor, weapons: [],
     caches: [
       ...(level.weaponDrops ?? armory.drops).flatMap(({at, distance, choices}, drop) => choices.map((kind, option) => ({
         z: distance ?? level.length * at, x: (option === (levelIndex + drop) % 2 ? -1 : 1) * (level.weaponLane ?? armory.lane), drop, kind,
@@ -1533,7 +1539,7 @@ function step(dt) {
     if(level.scenery==='rail' && level.part>=1 && enemy.laneX!==undefined) {
       const bend=Math.max(0,1-Math.abs(enemy.z-flow.forkZ)/flow.forkDepth);
       const runner=enemy.kind==='runner';
-      enemy.x+=( (runner ? -.52 : Math.max(flow.forkWidth,enemy.laneX)) - enemy.laneX)*bend;
+      enemy.x+=((runner ? -1 : 1) * flow.forkWidth + enemy.laneX * flow.forkSpread - enemy.laneX)*bend;
       if(!runner) pace*=1-(1-flow.detourPace)*bend;
     }
     enemy.z -= pace * (type?.speed ?? config.enemySpeed) * walkPace * reactionPace * haste * run.difficulty.pace * dt;
