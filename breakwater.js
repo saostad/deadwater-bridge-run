@@ -3,7 +3,7 @@
 // The drawing surface is independent of the simulation. z increases up the bridge.
 const Breakwater = (() => {
   const camera = {halfRoad: 4.6, halfScreen: .54, feet: .79, rise: 1.00, distance: 78,
-    metresPerDepth: .48, eyeSlope: .75, vertical: 1.03, pixelRatio: 1.5, detailedDistance: 76, soldierScale: 1.30, drumScale: 1.58};
+    metresPerDepth: .48, eyeSlope: .75, vertical: 1.03, pixelRatio: 1.5, detailedDistance: 76, get soldierScale() { return 1.30 * config.soldierVisualScale; }, drumScale: 1.58};
   const distance = () => camera.distance * (1 + crowdCamera.pullback * run.crowd);
   const rise = () => camera.rise * (1 + crowdCamera.pitch * run.crowd);
   const lift = (w,h) => w/h * cameraHalfScreen() / camera.halfRoad * camera.vertical;
@@ -28,7 +28,8 @@ const Breakwater = (() => {
   function muzzle(member,w,h,weapon='standard',barrel=0) {
     const [x,z] = ground(member.x,member.y,w,h);
     const style=weaponEffects[weapon];
-    return {x:x-(.233+barrel*(style.barrelOffset ?? 0))*camera.soldierScale,z:z+style.muzzle*camera.soldierScale,y:1.33*camera.soldierScale};
+    const scale = camera.soldierScale * member.scale;
+    return {x:x-(.233+barrel*(style.barrelOffset ?? 0))*scale,z:z+style.muzzle*scale,y:1.33*scale};
   }
   const vert = `#version 300 es
   precision highp float;
@@ -602,8 +603,8 @@ const Breakwater = (() => {
             put('flash-'+gun,tip.x,tip.y,tip.z,kick,6);
           }
         }
-        put('ring',x,0,z,camera.soldierScale);
-        put('contact',x,.013,z,camera.soldierScale,8);
+        put('ring',x,0,z,camera.soldierScale*p.scale);
+        put('contact',x,.013,z,camera.soldierScale*p.scale,8);
         soldier(x,z,time*13+i,Math.min(.65,Math.abs(run.velocity)*.4+p.joining*.6),kick,0,p.scale);
       });
       for(const shot of run.shots){

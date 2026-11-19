@@ -2,7 +2,7 @@
 
 // Level distances, timings, and movement are measured in world units and seconds.
 const config = {
-  approachSpeed: 20, steering: 2.3, response: 11, startingSquad: 3,
+  approachSpeed: 20, steering: 2.3, response: 11, startingSquad: 3, soldierVisualScale: .875,
   edge: 0.86, viewDistance: 180, fireRange: 79, fireInterval: 0.14,
   aimWidth: 0.32, aimWidthPerColumn: 0.035, breachLine: -4, shotSpeed: 83, barricadeWidth: 0.26,
   barricadeDamage: 2, enemySpeed: 24, contactWidth: 0.23, contactInterval: 0.24,
@@ -3069,19 +3069,21 @@ function draw(time) {
   for (const [i, member] of members.entries()) {
     const {x: memberX, y: memberY, row} = member;
     if (stage) continue;
+    const visualScale = config.soldierVisualScale * member.scale;
+    const figureSize = size * visualScale;
     ctx.strokeStyle = run.armor ? '#9ccfffbd' : '#a8f278af';
     ctx.lineWidth = size;
     ctx.beginPath();
-    ctx.ellipse(memberX, memberY, radiusX, radiusY, 0, 0, Math.PI * 2);
+    ctx.ellipse(memberX, memberY, radiusX * visualScale, radiusY * visualScale, 0, 0, Math.PI * 2);
     ctx.stroke();
     const delay = ((i * 7) % 11) * 0.003;
     const sinceShot = run.elapsed - run.lastVolleyAt - delay;
     const recoil = sinceShot >= 0 && mode === 'running' ?
       Math.max(0, 1 - sinceShot / config.muzzleTime) : 0;
     figure(memberX, memberY,
-      size * 1.15 * member.scale, 'squad', mode === 'running' ? Math.sin(time * 13 + i) * Math.min(2.6, Math.abs(run.velocity) * 2 + member.joining * 2) : 0, 0, recoil);
+      figureSize * 1.15, 'squad', mode === 'running' ? Math.sin(time * 13 + i) * Math.min(2.6, Math.abs(run.velocity) * 2 + member.joining * 2) : 0, 0, recoil);
     if (row === 0 && recoil > 0.55) {
-      const tip = [memberX + 2.5 * size, memberY - (39 - recoil) * size];
+      const tip = [memberX + 2.5 * figureSize, memberY - (39 - recoil) * figureSize];
       line([tip[0] - 3 * size, tip[1] + size], [tip[0] + 3 * size, tip[1] - size], '#fff2b8', 2 * size);
       line([tip[0], tip[1] + 3 * size], [tip[0] + size, tip[1] - 4 * size], '#fffbed', 2 * size);
     }
@@ -3099,7 +3101,7 @@ function draw(time) {
         ctx.translate(x, y);
         ctx.rotate((index % 2 ? -1 : 1) * phase * 1.2);
         ctx.scale(1, 1 - phase * 0.6);
-        figure(0, 0, size, 'squad', 0, 0, 0, true);
+        figure(0, 0, size * config.soldierVisualScale, 'squad', 0, 0, 0, true);
         ctx.restore();
       }
       ctx.strokeStyle = protectedByArmor ? '#a2dbff' : '#ff796c';
