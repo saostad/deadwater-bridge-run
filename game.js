@@ -542,10 +542,15 @@ function soundEnabled() {
 
 async function decodeDeathRecordings() {
   try {
-    return await Promise.all(undeadRecordings.map(encoded => {
-      const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
-      return audio.decodeAudioData(bytes.buffer);
-    }));
+    const decodePool = async recordings => {
+      const samples = await Promise.all(recordings.map(encoded => {
+        const bytes = Uint8Array.from(atob(encoded), char => char.charCodeAt(0));
+        return audio.decodeAudioData(bytes.buffer);
+      }));
+      return {samples, remaining: [], last: undefined};
+    };
+    const [heavy, boss] = await Promise.all([decodePool(heavyRecordings), decodePool(undeadRecordings)]);
+    return {heavy, boss};
   } catch (error) {
     console.error('Zombie death recordings could not be decoded', {fallback: true, using: 'impact sounds only', error});
     soundStatus.textContent = 'Zombie voices unavailable. Other sounds are on. Toggle Sound off and on to retry.';
@@ -555,27 +560,24 @@ async function decodeDeathRecordings() {
 }
 
 // Keep the rotation across missions, including when a boss interrupts another voice.
-const unusedDeathTakes = [];
-let lastDeathTake;
-function nextDeathTake(samples) {
-  if (!unusedDeathTakes.length) unusedDeathTakes.push(...samples.keys());
-  const choices = unusedDeathTakes.length === 1 ? unusedDeathTakes : unusedDeathTakes.filter(take => take !== lastDeathTake);
+function nextDeathTake(pool) {
+  if (!pool.remaining.length) pool.remaining.push(...pool.samples.keys());
+  const choices = pool.remaining.length === 1 ? pool.remaining : pool.remaining.filter(take => take !== pool.last);
   const take = choices[Math.floor(Math.random() * choices.length)];
-  unusedDeathTakes.splice(unusedDeathTakes.indexOf(take), 1);
-  lastDeathTake = take;
-  return take;
+  pool.remaining.splice(pool.remaining.indexOf(take), 1);
+  pool.last = take;
+  return pool.samples[take];
 }
 
 async function playDeathGroan(boss) {
   const battle = run;
-  const samples = await deathRecordingsReady;
-  if (!samples || run !== battle || !soundEnabled()) return;
+  const pools = await deathRecordingsReady;
+  if (!pools || run !== battle || !soundEnabled()) return;
   if (!boss && (deathVoice || mode !== 'running')) return;
-  const take = nextDeathTake(samples);
   deathVoice?.stop();
   const voice = audio.createBufferSource();
   deathVoice = voice;
-  voice.buffer = samples[take];
+  voice.buffer = nextDeathTake(boss ? pools.boss : pools.heavy);
   voice.connect(audioOutput);
   voice.onended = () => {
     voice.disconnect();

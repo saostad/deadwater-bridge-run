@@ -45,4 +45,4 @@ Open the app online and wait for **Ready for offline play** below the controls. 
 
 ## Sound credits
 
-Large zombie and boss deaths draw from eight recorded performances at their original pitch. AntumDeluge recorded four undead moans for Stendhal. Exewin contributed takes 1, 3, 6, and 9 from their death sounds pack. Both collections are CC0. [Undead Moans](https://opengameart.org/content/undead-moans) · [Death sounds](https://opengameart.org/content/death-sounds-0) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+Heavy zombie deaths rotate through the six original CC0 vocal takes in [Hurt Sound Effects by EZduzziteh](https://opengameart.org/content/hurt-sound-effects). Boss deaths draw from a separate pool of eight recorded performances at their original pitch. AntumDeluge recorded four undead moans for Stendhal. Exewin contributed takes 1, 3, 6, and 9 from their death sounds pack. Both collections are CC0. [Undead Moans](https://opengameart.org/content/undead-moans) · [Death sounds](https://opengameart.org/content/death-sounds-0) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
