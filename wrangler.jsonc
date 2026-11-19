@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "shooting-zombies",
+  "name": "deadwater-bridge-run",
   "compatibility_date": "2026-11-18",
   "build": {
     "command": "npm run build",

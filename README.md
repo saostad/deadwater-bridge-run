@@ -10,7 +10,7 @@ With Node.js 22.12 or newer, run `npm ci` and `npm run dev`. Open the local URL 
 
 ## Deploy to Cloudflare Workers
 
-The game uses Workers Static Assets. Wrangler serves the existing HTML, JavaScript, CSS, and game art directly. The Worker name is `shooting-zombies` in [wrangler.jsonc](wrangler.jsonc).
+The game uses Workers Static Assets. Wrangler serves the existing HTML, JavaScript, CSS, and game art directly. The Worker name is `deadwater-bridge-run` in [wrangler.jsonc](wrangler.jsonc).
 
 For a deployment from your computer, install dependencies with `npm ci`, then run these commands.
 
@@ -26,7 +26,7 @@ For Git deployments, connect the repository in **Cloudflare Workers & Pages** an
 
 | Setting | Value |
 | --- | --- |
-| Worker name | `shooting-zombies` |
+| Worker name | `deadwater-bridge-run` |
 | Production branch | `main` |
 | Root directory | Repository root |
 | Build command | `npm run build` |
