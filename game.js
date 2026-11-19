@@ -34,7 +34,7 @@ const falls = {
 
 const deathGroan = {
   largeKinds: new Set(['hulk', 'frost', 'breaker', 'boiler', 'carrier']),
-  heavyTakes: [0, 1], bossTake: 2, victoryChimeGain: .45,
+  victoryChimeGain: .45,
 };
 
 const difficulties = {
@@ -548,13 +548,24 @@ async function decodeDeathRecordings() {
   }
 }
 
+// Keep the rotation across missions, including when a boss interrupts another voice.
+const unusedDeathTakes = [];
+let lastDeathTake;
+function nextDeathTake(samples) {
+  if (!unusedDeathTakes.length) unusedDeathTakes.push(...samples.keys());
+  const choices = unusedDeathTakes.length === 1 ? unusedDeathTakes : unusedDeathTakes.filter(take => take !== lastDeathTake);
+  const take = choices[Math.floor(Math.random() * choices.length)];
+  unusedDeathTakes.splice(unusedDeathTakes.indexOf(take), 1);
+  lastDeathTake = take;
+  return take;
+}
+
 async function playDeathGroan(boss) {
   const battle = run;
   const samples = await deathRecordingsReady;
   if (!samples || run !== battle || !soundEnabled()) return;
   if (!boss && (deathVoice || mode !== 'running')) return;
-  const take = boss ? deathGroan.bossTake : deathGroan.heavyTakes[battle.nextDeathTake ?? 0];
-  if (!boss) battle.nextDeathTake = ((battle.nextDeathTake ?? 0) + 1) % deathGroan.heavyTakes.length;
+  const take = nextDeathTake(samples);
   deathVoice?.stop();
   const voice = audio.createBufferSource();
   deathVoice = voice;

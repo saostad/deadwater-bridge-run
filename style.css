@@ -175,7 +175,9 @@ kbd { display: inline-block; min-width: 24px; text-align: center; border: 1px so
 #breakwater[hidden] { display: none; }
 #scene { position: relative; }
 
-#equipped { display:flex; align-items:center; flex-wrap:wrap; gap:3px 7px; padding-bottom:5px; margin:0 0 5px; border-bottom:1px solid #ffffff30; font:600 12px/1.25 system-ui,sans-serif; }
+.pickup-hud { position:absolute; inset:auto 8px 6px; display:grid; justify-items:center; gap:4px; pointer-events:none; }
+.pickup-hud .combat-status { position:static; }
+#equipped { display:flex; align-items:center; flex-wrap:wrap; gap:3px 7px; padding:4px 8px; margin:0; border-radius:6px; background:#101719e8; font:600 12px/1.25 system-ui,sans-serif; }
 #equipped[hidden] { display:none; }
 #equipped strong { color:var(--gun-color); font-size:14px; }
 #equipped canvas { width:45px; height:20px; }

@@ -73,11 +73,13 @@
             </div>
           </div>
         </div>
+        <div class="pickup-hud">
+          <p id="combat-status" class="combat-status" role="status" hidden></p>
+          <p id="equipped" role="status" hidden><canvas id="equipped-icon" width="120" height="48" aria-hidden="true"></canvas><strong id="equipped-name"></strong><span id="equipped-benefit"></span></p>
+        </div>
         <p id="boss-result" class="combat-status" role="status" hidden></p>
       </div>
       <div class="progress">
-        <p id="combat-status" class="combat-status" role="status" hidden></p>
-        <p id="equipped" role="status" hidden><canvas id="equipped-icon" width="120" height="48" aria-hidden="true"></canvas><strong id="equipped-name"></strong><span id="equipped-benefit"></span></p>
         <div><span class="squad-readout"><strong id="squad">3</strong> SOLDIERS</span><span>WAVE <span id="percent">0%</span></span><span>BREACHES <span id="breaches">0 / 30</span></span></div>
         <progress id="distance" max="100" value="0" aria-label="Wave progress"></progress>
       </div>

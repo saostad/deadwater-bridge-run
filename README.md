@@ -45,4 +45,4 @@ Open the app online and wait for **Ready for offline play** below the controls. 
 
 ## Sound credits
 
-The large zombie and boss death vocals use AntumDeluge’s recordings for Stendhal. Deadwater uses takes 1, 2, and 4 at their original pitch, with a gain adjustment and MP3 encoding. [Undead Moans on OpenGameArt](https://opengameart.org/content/undead-moans) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+Large zombie and boss deaths draw from eight recorded performances at their original pitch. AntumDeluge recorded four undead moans for Stendhal. Exewin contributed takes 1, 3, 6, and 9 from their death sounds pack. Both collections are CC0. [Undead Moans](https://opengameart.org/content/undead-moans) · [Death sounds](https://opengameart.org/content/death-sounds-0) · [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
