@@ -32,8 +32,8 @@ const falls = {
   slideTime: .22, soundRange: 48, soundGap: .12, dustTime: .22,
 };
 
+const largeZombieKinds = new Set(['hulk', 'frost', 'breaker', 'boiler', 'carrier']);
 const deathGroan = {
-  largeKinds: new Set(['hulk', 'frost', 'breaker', 'boiler', 'carrier']),
   victoryChimeGain: .45,
 };
 
@@ -835,6 +835,7 @@ function reset(nextMode) {
   run.enemies.push(...run.specialists);
   run.acid = [];
   run.specialBursts = [];
+  setupFlow(level);
   const health = Math.ceil((charge.health + charge.healthPerLevel * bossTier) * difficulty.bruteHealth);
   const shield = Math.ceil((charge.shield + charge.shieldPerLevel * bossTier) * difficulty.bruteHealth);
   run.enemies.push({
@@ -1052,13 +1053,18 @@ function advanceBrute(enemy, dt) {
     const [squadCenter] = project(run.x, 0);
     const directHit = squadCenter >= left && squadCenter <= right;
     enemy.guarded = directHit;
+    if(levels[levelIndex].scenery==='cinder' && Math.abs(Math.abs(enemy.x)-encounterFlow.pipeLane)<encounterFlow.pipeWidth){
+      run.pipeBurst={lane:Math.sign(enemy.x)*encounterFlow.pipeLane,until:run.elapsed+encounterFlow.steamTime};
+      enemy.shield=Math.max(0,enemy.shield-encounterFlow.pipeShield);
+      playSound('boilerVent');
+    }
     run.bruteImpact = {
       x: enemy.x, time: run.elapsed, left: left / width, right: right / width,
       front: front / height, back: back / height, blocked, lost, landed,
       strikes: struck.slice(0, blocked + lost).map(member => [member.x / width, member.y / height]),
     };
     const outcome = lost || blocked ? damageSummary(blocked, lost) : 'Dodged';
-    bossResult.textContent = attack + ' · ' + outcome + ' · Squad ' + before + ' → ' + run.count;
+    bossResult.textContent = (run.pipeBurst?.until>run.elapsed?'Pipe ruptured · ':'') + attack + ' · ' + outcome + ' · Squad ' + before + ' → ' + run.count;
     bossResult.dataset.outcome = lost ? 'hit' : blocked ? 'armor' : 'dodge';
     bossResult.hidden = false;
 
@@ -1127,7 +1133,7 @@ function defeatEnemy(enemy, sourceX, blast = false) {
   const fast = enemy.kind === 'runner' || enemy.kind === 'raider';
   const heavy = enemy.boss || enemy.kind === 'hulk' || enemy.kind === 'armored' || ['boiler', 'breaker', 'frost'].includes(enemy.kind);
   const seed = Math.sin(run.kills * 2.399 + enemy.x * 7);
-  if (soundEnabled() && (enemy.boss || deathGroan.largeKinds.has(enemy.kind))) {
+  if (soundEnabled() && (enemy.boss || largeZombieKinds.has(enemy.kind))) {
     if (enemy.boss) run.bossGroan = true;
     void playDeathGroan(enemy.boss);
   }
@@ -1175,6 +1181,8 @@ function advanceFalls(dt) {
 }
 
 function unlockCache(cache) {
+  if (cache.passed) return;
+  if (cache.action) { useRailPanel(cache); return; }
   if (cache.drop !== undefined) {
     for (const other of run.caches) {
       if (other.drop === cache.drop) other.passed = true;
@@ -1211,6 +1219,8 @@ function unlockCache(cache) {
       for (const enemy of run.enemies) {
         if (enemy.boss || enemy.passed || enemy.phase === 'tunnel' || enemy.health <= 0 || enemy.z < 0 ||
             Math.abs(enemy.z - cache.z) > armory.drumDepth || Math.abs(enemy.x - cache.x) > armory.drumWidth) continue;
+        if(enemy.plates) enemy.plateLostAt=run.elapsed;
+        enemy.plates = 0;
         enemy.health = Math.max(0, enemy.health - armory.drumPower);
         enemy.lastHit = run.elapsed;
         if (!enemy.health) defeatEnemy(enemy, cache.x, true);
@@ -1485,6 +1495,9 @@ function step(dt) {
           barricade.kind === 'debris' ? (level.debrisName ?? 'Storm debris') : 'Barricade collision');
   }
 
+  if(run.shutter && !run.shutter.bell && run.shutter.until-run.elapsed<=encounterFlow.bellLead){
+    run.shutter.bell=true;playSound('warning');combatNotice('Shutter opening');
+  }
   if (level.chapter) updateChapterHazards(level, formation);
   updateAcid(dt);
   updateEncounterObjects(travel, formation);
@@ -1496,6 +1509,7 @@ function step(dt) {
       continue;
     }
     const type = enemyTypes[enemy.kind];
+    if (enemy.siren && updateSiren(enemy)) continue;
     if (enemy.kind === 'boiler') {
       advanceBoiler(enemy);
       if (enemy.phase === 'vent' || enemy.phase === 'open') continue;
@@ -1511,7 +1525,20 @@ function step(dt) {
     const staggered = !type && walkerStagger(enemy, run.elapsed) > 0;
     const walkPace = type ? 1 : (enemy.siege ? walker.siegePace : walker.pace);
     const reactionPace = staggered ? walker.staggerPace : !type && enemy.health < walker.health ? walker.limpPace : 1;
-    enemy.z -= (type?.speed ?? config.enemySpeed) * walkPace * reactionPace * haste * run.difficulty.pace * dt;
+    const flow=encounterFlow;
+    let pace=largeZombieKinds.has(enemy.kind) ? flow.heavyPace : 1;
+    if(enemy.kind==='shield') pace=config.enemySpeed*walker.siegePace/type.speed;
+    if(enemy.lastHit!==undefined && enemy.kind==='runner') pace=flow.woundedRunnerPace;
+    if(enemy.lastHit!==undefined && enemy.kind==='armored') pace=flow.woundedArmorPace;
+    if(level.scenery==='rail' && level.part>=1 && enemy.laneX!==undefined) {
+      const bend=Math.max(0,1-Math.abs(enemy.z-flow.forkZ)/flow.forkDepth);
+      const runner=enemy.kind==='runner';
+      enemy.x+=( (runner ? -.52 : Math.max(flow.forkWidth,enemy.laneX)) - enemy.laneX)*bend;
+      if(!runner) pace*=1-(1-flow.detourPace)*bend;
+    }
+    enemy.z -= pace * (type?.speed ?? config.enemySpeed) * walkPace * reactionPace * haste * run.difficulty.pace * dt;
+    if(run.shutter?.until>run.elapsed && previousZ>=flow.shutterZ && Math.abs(enemy.x-run.shutter.x)<flow.shutterWidth)
+      enemy.z=Math.max(enemy.z,Math.min(previousZ,flow.shutterZ+flow.queueDepth*Math.abs(Math.sin(enemy.gaitOffset??0))));
     if ((enemy.kind === 'runner' || type?.flank) && previousZ >= config.fireRange && enemy.z < config.fireRange &&
         run.runnerCueUntil <= run.elapsed) {
       playSound('warning');
@@ -1537,7 +1564,7 @@ function step(dt) {
   if (run.cooldown <= 0 && run.count > 0) {
 
     const aimWidth = config.aimWidth + (formation.columns - 1) * config.aimWidthPerColumn + run.aimBonus;
-    const shields = run.enemies.filter(enemy => enemy.kind === 'shield' && enemy.health > 0 &&
+    const shields = run.enemies.filter(enemy => enemy.kind === 'shield' && enemy.plates > 0 && enemy.health > 0 &&
       !enemy.passed && enemy.z >= 0 && enemy.z < run.fireRange);
     const targets = run.enemies.filter(enemy =>
       enemy.phase !== 'tunnel' && shotCapacity(enemy) > (enemy.incomingShots ?? 0) &&
@@ -1546,13 +1573,16 @@ function step(dt) {
       (!enemy.boss || bossExposed(enemy)) &&
       Math.abs(enemy.x - run.x) < aimWidth &&
       (enemy.boss || enemy.kind === 'shield' || !shields.some(shield =>
-        shield.z < enemy.z && enemy.z - shield.z <= enemyTypes.shield.coverDepth &&
+        Math.abs(run.x-shield.x)<encounterFlow.shieldFlank && shield.z < enemy.z && enemy.z - shield.z <= enemyTypes.shield.coverDepth &&
         Math.abs(shield.x - enemy.x) < enemyTypes.shield.coverWidth)));
     const caches = new Set(run.caches.filter(cache => !cache.passed && cache.z >= 0 && cache.z < run.fireRange &&
       cache.health > (cache.incomingShots ?? 0) && Math.abs(cache.x - run.x) < (cache.drop !== undefined ? armory.panelAim : cache.kind==='drum' && onStage() ? .82*Breakwater.camera.drumScale/Breakwater.camera.halfRoad : armory.aimWidth)));
     const pods = run.pods.filter(pod => pod.z >= 0 && pod.z < run.fireRange && pod.health > (pod.incomingShots ?? 0) &&
       Math.abs(pod.x - run.x) < aimWidth);
-    const firingOrder = [...targets, ...pods, ...caches].sort((a, b) => a.z - b.z);
+    const aimedPanels = new Set([...caches].filter(cache => (cache.action || cache.kind==='drum') &&
+      Math.abs(run.x-cache.x)<encounterFlow.panelAim));
+    const firingOrder = [...targets, ...pods, ...caches].sort((a, b) =>
+      Number(aimedPanels.has(b))-Number(aimedPanels.has(a)) || a.z-b.z);
     const closeTarget = firingOrder[0]?.z < armory.tuning.scatter.range;
     const volleys = Math.ceil(Math.sqrt(run.count)) + run.volleyBonus +
       (run.scatter && closeTarget ? armory.tuning.scatter.rounds : 0);
@@ -1610,6 +1640,15 @@ function step(dt) {
             combatNotice('Boss shield broken');
             playSound('axeImpact');
           }
+          return false;
+        }
+        if(target.siren && target.callUntil && !target.spent && (target.callHits=(target.callHits??0)+1)>=encounterFlow.alarmHits){
+          target.spent=true;combatNotice('Siren silenced');
+        }
+        if(target.plates>0 && !coreOpen && (target.kind!=='shield' || Math.abs(shot.originX-target.x)<encounterFlow.shieldFlank)) {
+          target.plates--;
+          target.plateLostAt=run.elapsed;
+          if(!target.plates){combatNotice('Armor shattered');playSound('armorHit');}
           return false;
         }
         const power = coreOpen ? enemyTypes.boiler.coreDamage :
@@ -2962,6 +3001,7 @@ function draw(time) {
   if (level.scenery === 'snowline') drawChapterSignals(level,time);
   drawSpecialSignals(time,stage);
   drawArmorReadouts(time,stage);
+  drawFlow(level);
   for (const body of run.fallen) {
     const t=(body.age-body.contact)/falls.dustTime;
     if(t<0 || t>=1 || body.z>falls.soundRange || body.z < -7)continue;

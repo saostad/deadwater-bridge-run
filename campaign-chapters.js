@@ -18,9 +18,9 @@ const chapters = {
     name: 'Last Train', intro: 'Clear the platform.', deckStyle: 2, signature: 'crawler', surface: ['#978879','#655e56'], deckTint: [.68,.59,.51],
     warning: 'Carriage doors rattling', sound: 'grate', lead: 1.45, active: .95, releaseZ: 55, runners: 3, spacing: 3.1,
     missions: [
-      ['Last Train','Watch the carriage lamps. A rattling door releases runners onto the platform.', 'Ticket Punch','mace', [0,-.15,.22,-.08], 'runner', [[.16,-.61],[.50,-.61]]],
-      ['Switch House','Cross between platforms as emergency exits open on opposite sides.', 'Switchman','hook', [-.4,.4,-.35,.35], 'raider', [[.12,-.62],[.36,.61],[.62,-.58]]],
-      ['The Sleeper Cars','Shield bearers cover the middle while the sleeper cars empty on the left.', 'Berth Warden','hammer', [.25,-.1,.13,.3], 'shield', [[.15,-.62],[.32,-.58],[.58,-.66]]],
+      ['Last Train','Shoot the amber shutter switch to hold a lane. The bell warns when the crowd is about to break through.', 'Ticket Punch','mace', [0,-.15,.22,-.08], 'runner', [[.16,-.61],[.50,-.61]]],
+      ['Switch House','Runners cut left around the wreck. Interrupt the siren before the opposite door opens.', 'Switchman','hook', [-.4,.4,-.35,.35], 'raider', [[.12,-.62],[.36,.61],[.62,-.58]]],
+      ['The Sleeper Cars','Choose the supply truck for another round per volley, or seal an exit to funnel the next door wave.', 'Berth Warden','hammer', [.25,-.1,.13,.3], 'shield', [[.15,-.62],[.32,-.58],[.58,-.66]]],
       ['Signal Blackout','Follow the flashing door lamps and intercept the heavy platform wave.', 'Signal Cutter','blade', [-.2,-.44,.38,.12], 'hulk', [[.12,.59],[.29,-.63],[.48,-.57],[.67,.61]]],
       ['Terminus','Save the last boarding gate while both platforms empty.', 'Last Conductor','ram', [-.45,.45,0,-.21], 'armored', [[.11,-.6],[.28,.59],[.46,-.63],[.64,.59]]],
     ],
@@ -43,7 +43,7 @@ const chapters = {
     name: 'Cinderworks', intro: 'Cross the furnace floor.', deckStyle: 4, signature: 'boiler', surface: ['#968479','#71645c'], deckTint: [.68,.58,.51],
     warning: 'Pressure building', sound: 'boilerVent', lead: 1.55, active: 1.1, reach: 75, halfWidth: .27, damage: 3,
     missions: [
-      ['Cinderworks','Move out of the striped lane when the relief valve starts to hiss.', 'Stokehand','hammer', [.1,-.12,.14,0], 'runner', [[.19,-.42],[.53,.43]]],
+      ['Cinderworks','Dodge the hissing vents. Lure the boss onto a marked valve to rupture it and drain its shield.', 'Stokehand','hammer', [.1,-.12,.14,0], 'runner', [[.19,-.42],[.53,.43]]],
       ['Valve Gallery','Swap sides between steam bursts and watch the raiders coming down the other lane.', 'Valve Turner','mace', [-.42,.39,-.32,.2], 'raider', [[.14,-.47],[.35,.43],[.60,-.46]]],
       ['Slag Channel','Hold the clear side of the grating until the shield column passes.', 'Slag Hauler','ram', [.36,.12,-.36,.22], 'shield', [[.13,.46],[.32,-.44],[.56,.45]]],
       ['Pressure Vessel','Steam reaches the center grating. Dodge the vent before aiming for the furnace cores.', 'Pressure Jack','hook', [-.32,0,.37,-.21], 'hulk', [[.13,0],[.29,-.49],[.46,.46],[.65,0]]],
@@ -73,7 +73,7 @@ function buildChapterLevels() {
     const [name,objective,bossName,tool,lanes,escort,signals] = mission;
     const stage = chapterStages[part], length = stage.length;
     const side = lanes[0] < 0 ? -1 : 1;
-    const waves = b.waveAt.map((at,i) => [at*length,lanes[i],stage.column+i*b.waveGrowth+region*b.chapterGrowth,undefined,b.columnWidth]);
+    const waves = b.waveAt.map((at,i) => [(at+(i>=2?encounterFlow.quietGap:0))*length,lanes[i],stage.column+i*b.waveGrowth+region*b.chapterGrowth,undefined,b.columnWidth]);
     b.escortAt.forEach((at,i) => waves.push([at*length,side*(i ? .46 : -.46),b.escortSize[escort],escort]));
     const specialists = [[b.opening,lanes[0],chapter.signature], [length*b.supportAt,-side*.49,stage.support]];
     if (part === chapterStages.length-1) specialists.push([length*b.breakerAt,side*.55,'breaker']);
@@ -89,6 +89,11 @@ function buildChapterLevels() {
   }));
 }
 
+function railDoorLanes(signal, level) {
+  if (signal.redirected ?? run.sealNextDoor) return [-signal.x];
+  return level.part >= encounterFlow.choicePart ? [signal.x, -signal.x] : [signal.x];
+}
+
 // Warning and active phases use the simulation clock so pausing freezes doors and valves.
 function updateChapterHazards(level, formation) {
   const zone = level.chapter;
@@ -96,7 +101,9 @@ function updateChapterHazards(level, formation) {
     if (signal.done || run.elapsedDistance < signal.at) continue;
     if (signal.warnedAt === undefined) {
       signal.warnedAt = run.elapsed;
-      combatNotice(zone.warning + ' · ' + (signal.x < -.2 ? 'left' : signal.x > .2 ? 'right' : 'center'));
+      const lanes = level.scenery === 'rail' ? railDoorLanes(signal, level) : [signal.x];
+      const direction = lanes.length > 1 ? 'both sides' : lanes[0] < -.2 ? 'left' : lanes[0] > .2 ? 'right' : 'center';
+      combatNotice(zone.warning + ' · ' + direction);
       playSound(zone.sound);
     }
     const age = run.elapsed - signal.warnedAt - zone.lead * run.difficulty.warning;
@@ -105,10 +112,13 @@ function updateChapterHazards(level, formation) {
     if (!signal.released) {
       signal.released = true;
       if (level.scenery === 'rail') {
-        for (let i=0;i<zone.runners+level.part;i++) {
-          run.enemies.splice(-1,0,{kind:'runner', x:signal.x+(i%2 ? -.04 : .04), z:zone.releaseZ+i*zone.spacing,
-            gaitOffset:i,health:enemyTypes.runner.health});
-        }
+        signal.redirected = Boolean(run.sealNextDoor);
+        const total = zone.runners + level.part;
+        const lanes = railDoorLanes(signal, level);
+        const secondDoor = lanes.length > 1 ? Math.floor(total / 2) : 0;
+        releaseRailRunners(lanes[0], total - secondDoor);
+        if (secondDoor) releaseRailRunners(lanes[1], secondDoor);
+        run.sealNextDoor = false;
         playSound('grate');
       } else if (level.scenery === 'canopy') {
         const pod = campaignSpecialists.carrier;
@@ -165,15 +175,17 @@ function drawChapterSignals(level, time) {
       }
       ctx.restore();
     } else if (level.scenery==='rail') {
-      const [u,v,s]=project(x,zone.releaseZ);
-      const h=45*s,w=26*s, gap=active?w*.64:Math.sin(motion*28)*s;
-      ctx.fillStyle='#262924';ctx.fillRect(u-w,v-h,2*w,h);
-      for(const side of [-1,1]){
-        const edge=u+(side<0?-w-gap:gap);
-        ctx.fillStyle='#986f44';ctx.fillRect(edge,v-h,w,h);
-        ctx.fillStyle='#333c39';ctx.fillRect(edge+w*.15,v-h*.87,w*.70,h*.38);
+      for (const lane of railDoorLanes(signal, level)) {
+        const [u,v,s]=project(lane,zone.releaseZ);
+        const h=45*s,w=26*s, gap=active?w*.64:Math.sin(motion*28)*s;
+        ctx.fillStyle='#262924';ctx.fillRect(u-w,v-h,2*w,h);
+        for(const side of [-1,1]){
+          const edge=u+(side<0?-w-gap:gap);
+          ctx.fillStyle='#986f44';ctx.fillRect(edge,v-h,w,h);
+          ctx.fillStyle='#333c39';ctx.fillRect(edge+w*.15,v-h*.87,w*.70,h*.38);
+        }
+        ctx.fillStyle=active?'#b5e291':'#ffd477';ctx.fillRect(u-w,v-h-3*s,w*2,3*s);
       }
-      ctx.fillStyle=active?'#b5e291':'#ffd477';ctx.fillRect(u-w,v-h-3*s,w*2,3*s);
     } else if(level.scenery==='canopy') {
       if(!active){
         const [u,v,s]=project(x,zone.dropZ);
@@ -230,4 +242,138 @@ function drawPlanter(bed) {
     const spread=Math.sin(i*3.8)*12*s;
     polygon([[u,v-4*s],[u+spread-3*s,v-13*s],[u+spread,v-(18+i%3*3)*s],[u+spread+3*s,v-13*s]],i%2?'#829651':'#557547');
   }
+}
+
+// Rail controls are shootable panels. Their effects use simulation time and freeze on pause.
+const encounterFlow = {
+  plateHits: 4, heavyPace: .72, woundedArmorPace: .60, woundedRunnerPace: 1.4,
+  shieldFlank: .36, alarmAt: .32, alarmRange: 64, alarmWindup: 2.2, alarmHits: 3,
+  shutterAt: [.13,.54], shutterZ: 35, shutterWidth: .55, shutterTime: 4, queueDepth: 6, bellLead: 1, panelAim: .13,
+  choicePart: 2, choiceAt: .35, forkZ: 68, forkWidth: .36, forkDepth: 26, detourPace: .80,
+  pipeLane: .56, pipeWidth: .16, pipeShield: 22, steamTime: 1.2,
+  drumAt: [.14,.44], rescueLane: .78, quietGap: .065,
+};
+
+function setupFlow(level) {
+  const f=encounterFlow;
+  for(const enemy of run.enemies) {
+    if (['hulk','boiler','breaker','shield'].includes(enemy.kind)) enemy.plates=f.plateHits;
+  }
+  if(!level.chapter) return;
+  function panel(at,x,kind,action) {
+    run.caches.push({z:at*level.length,x,kind,action,health:armory.tuning[kind].hits+run.difficulty.armor});
+  }
+  if(level.waves.some(wave=>wave[3]==='shield')){
+    const [z,x]=level.waves[0];
+    for(const guard of formWave([z-6,x,2,'shield',.12],level,run.difficulty)){
+      guard.plates=f.plateHits;
+      run.enemies.push(guard);
+    }
+  }
+  f.drumAt.forEach((at,i)=>panel(at,level.waves[i][1], 'drum'));
+  panel(f.drumAt[1],f.rescueLane,'rescue');
+  if(level.scenery!=='rail') return;
+  f.shutterAt.forEach((at,i)=>panel(at,i ? .52 : -.52,'armor','shutter'));
+  if(level.part>=1) {
+    const type=enemyTypes.howler;
+    run.enemies.push({kind:'howler',siren:true,x:.47,z:f.alarmAt*level.length,health:type.health+run.difficulty.armor,size:type.size,gaitOffset:0});
+  }
+  if(level.part>=f.choicePart) {
+    panel(f.choiceAt,-.7,'rescue','supply');
+    panel(f.choiceAt,.7,'armor','seal');
+  }
+}
+
+function releaseRailRunners(x,count) {
+  const rail=chapters.rail;
+  for(let i=0;i<count;i++) {
+    const lane=x+(i%2 ? -.04 : .04);
+    run.enemies.splice(-1,0,{kind:'runner',x:lane,laneX:lane,z:rail.releaseZ+i*rail.spacing,gaitOffset:i,health:enemyTypes.runner.health+1});
+  }
+}
+
+function useRailPanel(cache) {
+  if(cache.passed) return;
+  cache.passed=true;
+  if(cache.action==='shutter') {
+    run.shutter={x:cache.x,until:run.elapsed+encounterFlow.shutterTime};
+    combatNotice('Shutter closed · cover the other lane');
+    playSound('grate');
+  } else {
+    for(const other of run.caches) if(['supply','seal'].includes(other.action)) other.passed=true;
+    if(cache.action==='supply') {
+      run.volleyBonus+=armory.tuning.spread.rounds;
+      combatNotice('Supply truck · extra round per volley');
+    } else {
+      run.sealNextDoor=true;
+      combatNotice('Exit sealed · next ambush uses the opposite lane');
+    }
+    playSound(cache.action==='seal'?'grate':'recruit');
+  }
+}
+
+function updateSiren(enemy) {
+  if(enemy.spent || enemy.z>encounterFlow.alarmRange) return false;
+  if(enemy.callUntil===undefined) {
+    enemy.callUntil=run.elapsed+encounterFlow.alarmWindup*run.difficulty.warning;
+    combatNotice('Siren winding · shoot the caller');playSound('warning');
+  }
+  if(run.elapsed>=enemy.callUntil) {
+    enemy.spent=true;
+    releaseRailRunners(-Math.sign(enemy.x)*.6,chapters.rail.runners);
+    combatNotice('Alarm answered · runners at the opposite door');playSound('howl');
+  }
+  return true;
+}
+
+function drawFlow(level) {
+  const f=encounterFlow;
+  function tag(x,z,label,color,lift=26) {
+    const [u,v,s]=project(x,z);
+    ctx.font='bold '+Math.max(10,15*s)+'px system-ui';
+    const w=ctx.measureText(label).width+8, y=v-lift*s;
+    ctx.fillStyle='#162024';ctx.fillRect(u-w/2,y-12,w,16);
+    ctx.fillStyle=color;ctx.textAlign='center';ctx.fillText(label,u,y);
+  }
+  ctx.save();
+  for(const cache of run.caches) {
+    if(cache.passed || cache.z<0 || cache.z>config.fireRange) continue;
+    if(cache.kind==='drum') {
+      const [x,y,s]=project(cache.x,cache.z);
+      ctx.strokeStyle='#dc824d';ctx.beginPath();
+      const rx=(project(cache.x+armory.drumWidth,cache.z)[0]-x);
+      ctx.ellipse(x,y,rx,Math.abs(project(cache.x,cache.z+armory.drumDepth)[1]-y),0,0,Math.PI*2);ctx.stroke();
+    }
+    if(cache.action) tag(cache.x,cache.z,{shutter:'▼ SHUTTER',seal:'SEAL EXIT',supply:'SUPPLY TRUCK'}[cache.action],'#ffcf74');
+  }
+  if(level.scenery==='rail' && level.part>=1) {
+    const [x,y,s]=project(0,f.forkZ);
+    ctx.fillStyle='#47493c';ctx.fillRect(x-26*s,y-13*s,52*s,15*s);
+    for(let i=0;i<5;i++){ctx.fillStyle='#92a4a4';ctx.fillRect(x+(-23+i*10)*s,y-11*s,7*s,6*s);}
+  }
+  if(run.shutter?.until>run.elapsed) {
+    const [x,y,s]=project(run.shutter.x,f.shutterZ), right=project(run.shutter.x+f.shutterWidth,f.shutterZ)[0];
+    ctx.fillStyle='#52595a';ctx.fillRect(2*x-right,y-22*s,2*(right-x),22*s);
+    for(let i=1;i<=4;i++)line([2*x-right,y-i*4*s],[right,y-i*4*s],'#aaa897',s);
+  }
+  for(const e of run.enemies) {
+    if(e.passed || e.health<=0 || e.z<0 || e.z>config.fireRange) continue;
+    if(e.siren && !e.spent) tag(e.x,e.z,e.callUntil?'⚠ CALLING':'SIREN','#ffbe57',58);
+    if(e.plateLostAt!==undefined && run.elapsed-e.plateLostAt<config.fallTime){
+      const t=(run.elapsed-e.plateLostAt)/config.fallTime;
+      const [x,y,s]=project(e.x,e.z);
+      for(const side of [-1,1]){
+        ctx.fillStyle='#c7d5da';ctx.fillRect(x+side*(6+16*t)*s,y+(-30+32*t*t)*s,6*s,4*s);
+      }
+    }
+    if(e.plates>0) tag(e.x,e.z,'▰'.repeat(e.plates),'#b5d9e2',64);
+  }
+  if(level.scenery==='cinder' && run.enemies.at(-1).z<config.fireRange){
+    for(const side of [-1,1]) {
+      const lane=side*f.pipeLane;
+      if(run.pipeBurst?.lane===lane && run.pipeBurst.until>run.elapsed) drawLaneWarning(lane,18,f.pipeWidth,'#fff0c78c');
+      tag(lane,3,'VALVE','#ffd199',4);
+    }
+  }
+  ctx.restore();
 }

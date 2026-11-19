@@ -567,7 +567,7 @@ const Breakwater = (() => {
         const windup=e.attack?clamp(1-(e.attack.release-poseTime)/(enemyTypes[e.kind].windup*run.difficulty.warning),0,1):0;
         const ordinary = !e.kind && !e.boss;
         const stagger = ordinary && e.health > 0 ? walkerStagger(e,time) : 0;
-        const limp = ordinary && e.health === 1 ? .42 : 0;
+        const limp = (ordinary && e.health === 1) || (e.kind==='armored' && e.lastHit!==undefined) ? .42 : 0;
         const reaction = e.boss ? bruteFollowthrough(e,time) : limp + stagger;
         const speed = e.attack ? stride*.12 : stride * (1 - limp*.42 - stagger*.34);
         const args=[e.x*X,(e.height??0),e.z*Z+flinch*.09,size,e.boss?4:runner?3:2,phase,speed,reaction,
