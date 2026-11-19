@@ -731,6 +731,40 @@ function setEnvironment(level) {
   }
 }
 
+const checkpointKey = 'deadwater.campaign.v1';
+const saveStatus = byId('save-status');
+let returningPlayer = false;
+
+function restoreCheckpoint() {
+  try {
+    const stored = localStorage.getItem(checkpointKey);
+    if (stored === null) return;
+    const checkpoint = JSON.parse(stored);
+    const index = levels.findIndex(level => level.name === checkpoint?.level);
+    if (index < 0 || typeof checkpoint.difficulty !== 'string' || !Object.hasOwn(difficulties, checkpoint.difficulty)) {
+      throw new Error('Unrecognized campaign checkpoint');
+    }
+    levelIndex = index;
+    difficultySelect.value = checkpoint.difficulty;
+    returningPlayer = true;
+  } catch (error) {
+    console.error('Campaign checkpoint could not be restored', {fallback: true, using: 'level selector', error});
+    saveStatus.textContent = 'Your saved level could not be opened. Choose a level to continue.';
+    saveStatus.hidden = false;
+  }
+}
+
+function saveCheckpoint(index) {
+  try {
+    localStorage.setItem(checkpointKey, JSON.stringify({level: levels[index].name, difficulty: difficultySelect.value}));
+    saveStatus.hidden = true;
+  } catch (error) {
+    console.error('Campaign checkpoint could not be saved', {fallback: true, using: 'session only', level: index + 1, error});
+    saveStatus.textContent = 'Your level could not be saved on this device. Allow site storage to keep your place.';
+    saveStatus.hidden = false;
+  }
+}
+
 function reset(nextMode) {
   deathVoice?.stop();
   deathVoice = undefined;
@@ -809,7 +843,14 @@ function reset(nextMode) {
 }
 
 function setMode(nextMode) {
+  const resumingPause = mode === 'paused' && nextMode === 'running';
   mode = nextMode;
+  if (mode === 'running' && !resumingPause) {
+    returningPlayer = false;
+    saveCheckpoint(levelIndex);
+  } else if (mode === 'won') {
+    saveCheckpoint(Math.min(levelIndex + 1, levels.length - 1));
+  }
   if (mode === 'won' || mode === 'lost') clearEntranceCue();
   byId('equipped').hidden = !run.weapons.length || mode !== 'running';
   updateAudioVolume();
@@ -837,7 +878,7 @@ function setMode(nextMode) {
   const stage = level.name.toUpperCase();
   const breached = run.breaches >= run.breachLimit;
   const messages = {
-    ready: [level.chapter ? level.chapter.name.toUpperCase() + ' · ' + (level.part+1) + '/' + level.chapter.missions.length : stage, level.title, level.objective, 'Deploy squad'],
+    ready: [level.chapter ? level.chapter.name.toUpperCase() + ' · ' + (level.part+1) + '/' + level.chapter.missions.length : stage, level.title, level.objective, returningPlayer ? 'Continue level ' + (levelIndex + 1) : 'Deploy squad'],
     paused: [stage, 'Paused.', 'Resume when your squad is ready.', 'Resume'],
     won: [canAdvance ? 'MISSION COMPLETE' : 'CAMPAIGN COMPLETE', canAdvance ? 'Bridge secured.' : 'All crossings secured.', run.count + ' survived · ' + run.kills + ' eliminated.', canAdvance ? 'Next level' : 'Play again'],
     lost: ['MISSION FAILED', breached ? 'Bridge breached.' : 'Squad lost.',
@@ -3045,11 +3086,14 @@ replay.addEventListener('click', () => {
   reset('running');
   canvas.focus();
 });
-difficultySelect.addEventListener('change', () => reset('ready'));
-levelSelect.addEventListener('change', () => {
+function selectMission() {
+  returningPlayer = false;
   levelIndex = Number(levelSelect.value);
+  saveCheckpoint(levelIndex);
   reset('ready');
-});
+}
+difficultySelect.addEventListener('change', selectMission);
+levelSelect.addEventListener('change', selectMission);
 pause.addEventListener('click', togglePause);
 byId('restart').addEventListener('click', () => {
   void enableAudio();
@@ -3083,6 +3127,7 @@ for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {
   });
 }
 
+restoreCheckpoint();
 reset('ready');
 resize();
 new ResizeObserver(resize).observe(canvas);
