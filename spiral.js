@@ -108,3 +108,10 @@ function drawSpiralDeck(){
     }
   }
 }
+
+// Frames are ordered as aim, left step, right step and recoil.
+function rangerFrame(phase,stride,kick){
+  if(kick>.62)return 3;
+  if(stride<.12 || Math.abs(Math.sin(phase))<.28)return 0;
+  return Math.sin(phase)<0 ? 1 : 2;
+}

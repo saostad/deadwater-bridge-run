@@ -149,6 +149,9 @@ const Breakwater = (() => {
       }
       if(info.z>0.){turn(p,n,vec3(0),-info.z*1.4);p.y*=1.-info.z*.5;}
     }
+    if(kind==10.){
+      turn(p,n,vec3(0),-info.z*1.4);
+    }
     if(kind==9.){
       p.x += p.y*pose.x;
       p.y *= pose.y;
@@ -195,6 +198,12 @@ const Breakwater = (() => {
   }
   void main(){
     if(dissolve>0. && fract(dot(floor(gl_FragCoord.xy),vec2(.75487767,.56984029)))<dissolve)discard;
+    if(mat==10.){
+      vec4 ink=texture(paintedSheet,vec2((decal+tex.x)/4.,1.-tex.y));
+      if(ink.a<.46)discard;
+      outColor=shadow>.5?vec4(.12,.14,.17,.34):vec4(ink.rgb,1.);
+      return;
+    }
     if(mat==9.){
       vec2 cell=vec2(mod(decal,4.),floor(decal/4.));
       vec4 ink=texture(paintedSheet,(cell+vec2(tex.x,1.-tex.y))/vec2(4.,3.));
@@ -340,6 +349,7 @@ const Breakwater = (() => {
     CampaignScenery.build(make);
     buildSpiralMeshes(make);
     const face=(m,w,y,h,z,tile,lean=0) => m.quad([-w/2,y,z],[-w/2,y+h,z+lean],[w/2,y+h,z+lean],[w/2,y,z],0xffffff,0,tile);
+    make('rangerArt',m=>face(m,1.11,0,1.85,0,-2));
     for(const kind of encounterTuning.roster)make(kind,m=>face(m,1,-5/256,1,0,-2));
     make('icePatch',m=>{
       m.loft(0,0,[[0,.90,1.02],[.035,1,1],[.055,.72,.63]],0x9de4f6,0,7);
@@ -566,20 +576,22 @@ const Breakwater = (() => {
         const top=c.drop!==undefined?1.09:drum?.41*camera.drumScale:.66;
         put('number',c.x*X,top,c.z*Z-(drum?.55*camera.drumScale:.13),drum?1.65*camera.drumScale:.90,0,0,0,0,0,1,0,8+c.health);
       }
+      function uploadSheet(name,atlas){
+        if(paintedTextures.has(name))return;
+        const texture=gl.createTexture();
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D,texture);
+        gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlas);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+        gl.activeTexture(gl.TEXTURE0);
+        paintedTextures.set(name,texture);
+      }
       function zombie(e) {
         if(e.phase==='tunnel')return;
         const atlas=paintedAtlases.get(e.kind);
         if(atlas?.naturalWidth){
-          if(!paintedTextures.has(e.kind)){
-            const texture=gl.createTexture();
-            gl.activeTexture(gl.TEXTURE2);
-            gl.bindTexture(gl.TEXTURE_2D,texture);
-            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,atlas);
-            gl.generateMipmap(gl.TEXTURE_2D);
-            gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
-            gl.activeTexture(gl.TEXTURE0);
-            paintedTextures.set(e.kind,texture);
-          }
+          uploadSheet(e.kind,atlas);
           const pose=paintedPose(e,time);
           put(e.kind,e.x*X,0,e.z*Z,e.size,9,pose.lean,pose.stretch,Number(pose.mirror),
             0,1,0,pose.frame,0,0,0,e.fade??0);
@@ -627,7 +639,11 @@ const Breakwater = (() => {
       const style=weaponEffects[gun];
       function soldier(x,z,phase,stride,kick,fall=0,scale=1) {
         const args=[x,0,z,camera.soldierScale*scale,1,phase,stride,kick*style.recoil,0,1,fall];
-        put(level.scenery==='spiral'?'ranger':'squad',...args);
+        const atlas=level.scenery==='spiral' && paintedAtlases.get('ranger');
+        if(atlas?.naturalWidth){
+          uploadSheet('rangerArt',atlas);
+          put('rangerArt',x,0,z,camera.soldierScale*scale,10,0,0,0,0,1,fall,rangerFrame(phase,stride,kick));
+        } else put(level.scenery==='spiral'?'ranger':'squad',...args);
         put('gun-'+gun,...args);
       }
       formation.members.forEach((p,i)=>{

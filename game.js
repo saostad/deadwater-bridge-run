@@ -795,6 +795,7 @@ function reset(nextMode) {
   selectRenderer();
   const level = levels[levelIndex];
   setEnvironment(level);
+  if(level.scenery==='spiral')loadPaintedAtlas('ranger');
   const difficultyName = difficultySelect.selectedOptions[0].textContent.toUpperCase();
   levelSelect.value = levelIndex;
   byId('level-number').textContent = 'LEVEL ' + String(levelIndex + 1).padStart(2, '0') + ' · ' + difficultyName;
@@ -2676,6 +2677,16 @@ function paintBossTool(art, x, y, angle, tool) {
 }
 
 function figure(x, y, scale, kind, stride, axe = 0, recoil = 0, distant = false, tool = 'axe', finish = 'plating') {
+  const ranger=kind==='squad' && levels[levelIndex].scenery==='spiral' && paintedAtlases.get('ranger');
+  if(ranger?.naturalWidth){
+    const frame=rangerFrame(stride,Math.abs(stride),recoil);
+    const cell=ranger.width/4, h=38*scale, w=h*cell/ranger.height;
+    const weapon=run.weapons.at(-1) ?? 'standard';
+    const barrelX=x+2.5*scale;
+    line([barrelX,y-h*.64],[barrelX,y-h*.98],weaponEffects[weapon].color,2*scale);
+    ctx.drawImage(ranger,frame*cell,0,cell,ranger.height,x-w/2,y-h,w,h);
+    return;
+  }
   const pose = Math.round(stride * 2);
   const axeFrame = Math.round(axe * 12);
   const brute = kind === 'brute';
