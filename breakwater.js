@@ -8,6 +8,12 @@ const Breakwater = (() => {
   const rise = () => camera.rise * (1 + crowdCamera.pitch * run.crowd);
   const lift = (w,h) => w/h * cameraHalfScreen() / camera.halfRoad * camera.vertical;
   function project(x,z,w,h,y=0) {
+    if(levels[levelIndex].scenery==='spiral'){
+      const point=spiralPoint(x,z);
+      x=point[0]/camera.halfRoad-run.cameraX;
+      y+=point[1];
+      z=point[2]/camera.metresPerDepth;
+    }
     const range = distance();
     const depth=Math.max(0,z-entranceCamera.anchoredDepth)/range;
     const viewZ=z/range-run.entrance.dolly*depth;
@@ -23,7 +29,7 @@ const Breakwater = (() => {
     const z=(dy-correction*anchor)/(slope-dy-correction);
     const depth=Math.max(0,z-anchor);
     const x=(px/w-.5)*(1+z-run.entrance.dolly*depth)-run.entrance.pan*depth;
-    return [x*camera.halfRoad/cameraHalfScreen(), z*range*camera.metresPerDepth];
+    return [(x/cameraHalfScreen()+run.cameraX)*camera.halfRoad, z*range*camera.metresPerDepth];
   }
   function muzzle(member,w,h,weapon='standard',barrel=0) {
     const [x,z] = ground(member.x,member.y,w,h);
@@ -318,6 +324,7 @@ const Breakwater = (() => {
     for(const kind of Object.keys(weaponEffects))models['gun-'+kind]=BreakwaterModels.gun(kind);
     for(const tool of Object.keys(bossWeapons))models['tool-'+tool]=BreakwaterModels.bossTool(tool);
     CampaignScenery.build(make);
+    buildSpiralMeshes(make);
     const face=(m,w,y,h,z,tile,lean=0) => m.quad([-w/2,y,z],[-w/2,y+h,z+lean],[w/2,y+h,z+lean],[w/2,y,z],0xffffff,0,tile);
     for(const kind of encounterTuning.roster)make(kind,m=>face(m,1,-5/256,1,0,-2));
     make('icePatch',m=>{
@@ -477,6 +484,13 @@ const Breakwater = (() => {
       groups[name]={vao,buffer,vertices:m.vertices.length/13,list:[]};
     }
     function put(name,x,y,z,size=1,kind=0,phase=0,stride=0,kick=0,axe=0,span=1,fall=0,number=0,tilt=0,bearing=0,fold=0,fade=0) {
+      if(levels[levelIndex].scenery==='spiral'){
+        if(name!=='interchange' && name!=='mesa'){
+          const point=spiralPoint(x/camera.halfRoad,z/camera.metresPerDepth);
+          x=point[0];y+=point[1];z=point[2];
+        }
+        x-=run.cameraX*camera.halfRoad;
+      }
       groups[name].list.push(x,y,z,size,phase,stride,kick,axe,kind,span,fall,number,tilt,bearing,fold,fade);
     }
     function batch(name) {
@@ -489,7 +503,7 @@ const Breakwater = (() => {
       gl.bindVertexArray(g.vao);
       gl.drawElementsInstanced(gl.TRIANGLES,g.vertices,gl.UNSIGNED_SHORT,0,g.list.length/16);
     }
-    const groundNames=['road','apron','span','divider','curb','pier','warning','contact'];
+    const groundNames=['interchange','road','apron','span','divider','curb','pier','warning','contact'];
     function draw(run,time,w,h,formation,shake,level) {
       const ratio=Math.min(window.devicePixelRatio || 1,camera.pixelRatio);
       const rw=Math.round(w*ratio),rh=Math.round(h*ratio);
@@ -497,7 +511,10 @@ const Breakwater = (() => {
       const X=camera.halfRoad,Z=camera.metresPerDepth;
       for(const g of Object.values(groups))g.list.length=0;
       CampaignScenery.place(level.scenery,put);
-      if (!level.chapter && (level.split || level.siege)) {
+      if(level.scenery==='spiral'){
+        put('interchange',0,0,0,1,5);
+        CampaignScenery.place('canyon',put);
+      } else if (!level.chapter && (level.split || level.siege)) {
         put('apron',0,0,0,1,5);
         const inner=level.siege?1.91:.33, outer=4.86;
         for(const side of [-1,1]){
@@ -506,7 +523,7 @@ const Breakwater = (() => {
         }
         if(level.siege) put('span',0,0,0,1,5,0,0,0,0,3.38);
       } else put('road',0,0,0,1,5);
-      for(const side of [-1,1]){
+      if(level.scenery!=='spiral')for(const side of [-1,1]){
         put('curb',side*4.83,0,0);
         for(let z=-4;z<91;z+=6.8)put('pier',side*4.63,0,z);
       }
@@ -516,7 +533,7 @@ const Breakwater = (() => {
         const lane=bruteStrikeLane(boss), [,back]=ground(0,lane.back,w,h);
         put('warning',lane.center*X,.028,back,1,7,0,0,0,0,boss.attackWidth*X,0,boss.z*Z-back);
       }
-      for(const g of run.gates)if(!g.used && visible(g)) {
+      for(const g of run.gates)if(!g.used && visible(g) && (level.scenery!=='spiral' || g.z<=spiral.bendStart)) {
         const truck=g.kind==='truck';
         if(truck) put('truck',g.x*X,0,g.z*Z);
         const tile = g.count < 0 ? 56 - g.count : g.count === 1 ? 6 : 40 + g.count;
@@ -524,7 +541,12 @@ const Breakwater = (() => {
       }
       for(const bed of level.beds ?? [])put('plantBed',bed.x*X,0,bed.z*Z);
       for(const b of run.barricades)if(visible(b))put(b.kind==='debris'?'debris':'crate',b.x*X,0,b.z*Z);
-      for(const c of run.caches)if(!c.passed && visible(c)){
+      for(const c of run.caches)if((!c.passed || c.station==='turret') && visible(c)){
+        if(c.station){
+          put(c.station==='turret'?'goldTurret':'roller',c.x*X,0,c.z*Z);
+          if(!c.passed)put('number',c.x*X,1.38,c.z*Z,.95,0,0,0,0,0,1,0,8+c.health);
+          continue;
+        }
         const drum=c.kind==='drum';
         put(c.kind,c.x*X,0,c.z*Z,drum?camera.drumScale:1);
         const top=c.drop!==undefined?1.09:drum?.41*camera.drumScale:.66;
@@ -633,7 +655,7 @@ const Breakwater = (() => {
       gl.uniform2f(uniforms.offset,shake[0]*2/w,-shake[1]*2/h);
       gl.stencilMask(255);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT|gl.STENCIL_BUFFER_BIT);
       gl.enable(gl.STENCIL_TEST);gl.stencilFunc(gl.ALWAYS,1,255);gl.stencilOp(gl.KEEP,gl.KEEP,gl.REPLACE);
-      gl.uniform1f(uniforms.shadow,0);batch('road');batch('apron');batch('span');
+      gl.uniform1f(uniforms.shadow,0);batch('interchange');batch('road');batch('apron');batch('span');
       gl.stencilOp(gl.KEEP,gl.KEEP,gl.KEEP);batch('pier');batch('curb');batch('divider');
       const objects=Object.keys(groups).filter(name=>!groundNames.includes(name));
       gl.stencilFunc(gl.EQUAL,1,255);gl.stencilOp(gl.KEEP,gl.KEEP,gl.INCR);

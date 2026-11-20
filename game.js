@@ -438,6 +438,7 @@ const levels = [
       [814, 0.09, 5, 'shield'], [865, -0.05, 4, 'hulk']],
   },
   ...buildChapterLevels(),
+  ...buildSpiralLevels(),
 ];
 let levelIndex = 0;
 
@@ -485,14 +486,15 @@ for (const [index, level] of levels.entries()) {
   const option = document.createElement('option');
   option.value = index;
   option.textContent = (index + 1) + '. ' + level.name;
-  if (level.chapter) {
-    if (!chapterOptions.has(level.chapter)) {
+  const chapter = level.chapter ?? (level.scenery==='spiral' ? spiral : null);
+  if (chapter) {
+    if (!chapterOptions.has(chapter)) {
       const group = document.createElement('optgroup');
-      group.label = level.chapter.name;
+      group.label = chapter.name;
       levelSelect.append(group);
-      chapterOptions.set(level.chapter,group);
+      chapterOptions.set(chapter,group);
     }
-    chapterOptions.get(level.chapter).append(option);
+    chapterOptions.get(chapter).append(option);
   } else levelSelect.append(option);
 }
 const entranceSetting = byId('entrance-camera');
@@ -736,6 +738,7 @@ environmentArt.addEventListener('error', () => {
 });
 function setEnvironment(level) {
   const field = stageCanvas.parentElement;
+  field.classList.toggle('spiral-field',level.scenery==='spiral');
   const scene = level.chapter ? level.scenery : '';
   if (scene === (environmentArt.dataset.scene ?? '')) return;
   environmentStatus.hidden = true;
@@ -843,6 +846,15 @@ function reset(nextMode) {
   run.enemies.push(...run.specialists);
   run.acid = [];
   run.specialBursts = [];
+  run.cameraX = 0;
+  if(level.turret){
+    run.turret={x:spiral.lane,z:spiral.turretDepth,kind:'spread',station:'turret',health:spiral.turretHits,cooldown:0};
+    run.caches.push(run.turret);
+  }
+  if(level.roller){
+    run.roller={x:0,z:140,kind:'armor',station:'roller',health:spiral.rollerHits};
+    run.caches.push(run.roller);
+  }
   setupFlow(level);
   const health = Math.ceil((charge.health + charge.healthPerLevel * bossTier) * difficulty.bruteHealth);
   const shield = Math.ceil((charge.shield + charge.shieldPerLevel * bossTier) * difficulty.bruteHealth);
@@ -1190,6 +1202,12 @@ function advanceFalls(dt) {
 
 function unlockCache(cache) {
   if (cache.passed) return;
+  if(cache.station){
+    cache.passed=true;
+    combatNotice(cache.station==='turret'?'Turret online':'Roller destroyed');
+    playSound(cache.station==='turret'?'equip':'axeImpact');
+    return;
+  }
   if (cache.action) { useRailPanel(cache); return; }
   if (cache.drop !== undefined) {
     for (const other of run.caches) {
@@ -1448,7 +1466,14 @@ function step(dt) {
   const targetVelocity = drag ? clamp((drag.target - run.x) * config.response, -steering, steering)
     : direction * steering;
   run.velocity += (targetVelocity - run.velocity) * (1 - Math.exp(-config.response * dt));
-  run.x = clamp(run.x + run.velocity * dt, -config.edge, config.edge);
+  const interchange=level.scenery==='spiral';
+  const edge=interchange?spiral.edge:config.edge;
+  run.x = clamp(run.x + run.velocity * dt, -edge, edge);
+  if(interchange){
+    const zone=spiral.deadZone/cameraHalfScreen();
+    run.cameraX=clamp(clamp(run.cameraX,run.x-zone,run.x+zone),-spiral.panLimit,spiral.panLimit);
+    updateSpiralTurret(dt);
+  }
   run.elapsed += dt;
   if (run.elapsed >= run.combatNoticeUntil) combatStatus.hidden = true;
   const travel = config.approachSpeed * run.difficulty.pace * dt;
@@ -1464,11 +1489,13 @@ function step(dt) {
   for (const cache of run.caches) {
     if (cache.passed) continue;
     const previousZ = cache.z;
-    cache.z -= travel;
+    if(cache.station!=='turret') cache.z -= travel;
     if (cache.kind === 'drum' && cache.health > 0 && touchesFormation(cache, previousZ, formation)) {
       damage(armory.drumCollision, 'Shock drum collision');
       cache.passed = true;
     }
+    if(cache.station==='roller' && previousZ>0 && cache.z<=0 && Math.abs(run.x)<spiral.rollerWidth)
+      damage(config.barricadeDamage,'Spiked roller');
     if (cache.z < config.breachLine) cache.passed = true;
   }
 
@@ -1579,15 +1606,16 @@ function step(dt) {
       (enemy.kind || enemy.boss || walkerStagger(enemy, run.elapsed) === 0) && enemy.health > 0 && !enemy.passed &&
       enemy.z >= 0 && enemy.z < run.fireRange &&
       (!enemy.boss || bossExposed(enemy)) &&
+      (!run.roller || run.roller.passed || enemy.z<run.roller.z || Math.abs(run.x)>spiral.rollerWidth) &&
       Math.abs(enemy.x - run.x) < aimWidth &&
       (enemy.boss || enemy.kind === 'shield' || !shields.some(shield =>
         Math.abs(run.x-shield.x)<encounterFlow.shieldFlank && shield.z < enemy.z && enemy.z - shield.z <= enemyTypes.shield.coverDepth &&
         Math.abs(shield.x - enemy.x) < enemyTypes.shield.coverWidth)));
     const caches = new Set(run.caches.filter(cache => !cache.passed && cache.z >= 0 && cache.z < run.fireRange &&
-      cache.health > (cache.incomingShots ?? 0) && Math.abs(cache.x - run.x) < (cache.drop !== undefined ? armory.panelAim : cache.kind==='drum' && onStage() ? .82*Breakwater.camera.drumScale/Breakwater.camera.halfRoad : armory.aimWidth)));
+      cache.health > (cache.incomingShots ?? 0) && Math.abs(cache.x - run.x) < (cache.station==='roller' ? spiral.rollerWidth : cache.drop !== undefined ? armory.panelAim : cache.kind==='drum' && onStage() ? .82*Breakwater.camera.drumScale/Breakwater.camera.halfRoad : armory.aimWidth)));
     const pods = run.pods.filter(pod => pod.z >= 0 && pod.z < run.fireRange && pod.health > (pod.incomingShots ?? 0) &&
       Math.abs(pod.x - run.x) < aimWidth);
-    const aimedPanels = new Set([...caches].filter(cache => (cache.action || cache.kind==='drum') &&
+    const aimedPanels = new Set([...caches].filter(cache => (cache.station || cache.action || cache.kind==='drum') &&
       Math.abs(run.x-cache.x)<encounterFlow.panelAim));
     const firingOrder = [...targets, ...pods, ...caches].sort((a, b) =>
       Number(aimedPanels.has(b))-Number(aimedPanels.has(a)) || a.z-b.z);
@@ -1692,7 +1720,7 @@ function step(dt) {
 }
 
 function project(x, z) {
-  if (onStage()) return Breakwater.project(x, z, width, height);
+  if (onStage() || levels[levelIndex].scenery==='spiral') return Breakwater.project(x, z, width, height);
   const distance = 44 * (1 + crowdCamera.pullback * run.crowd);
   const depth = Math.max(0, z - entranceCamera.anchoredDepth) / distance;
   const viewZ = z / distance - run.entrance.dolly * depth;
@@ -1704,7 +1732,8 @@ function project(x, z) {
 }
 
 function cameraHalfScreen() {
-  return (onStage() ? Breakwater.camera.halfScreen : .49) * (1 - crowdCamera.widen * run.crowd);
+  const wide=levels[levelIndex].scenery==='spiral'?spiral.viewScale:1;
+  return wide * (onStage() ? Breakwater.camera.halfScreen : .49) * (1 - crowdCamera.widen * run.crowd);
 }
 
 function settleProgress(start) {
@@ -2336,6 +2365,15 @@ function drawWeaponIcon(kind, x, y, scale) {
 }
 
 function drawArmoryCache(cache) {
+  if(cache.station){
+    const [x,y,s]=project(cache.x,cache.z);
+    ctx.fillStyle=cache.station==='turret'?'#c89436':'#986c4d';
+    ctx.fillRect(x-28*s,y-18*s,56*s,18*s);
+    if(cache.station==='turret')line([x,y-16*s],[x+5*s,y-34*s],'#efc760',7*s);
+    ctx.textAlign='center';ctx.fillStyle='white';ctx.font='bold '+Math.max(10,14*s)+'px system-ui';
+    ctx.fillText(cache.passed?'ON':String(cache.health),x,y-3*s);
+    return;
+  }
   const [x, y, s] = project(cache.x, cache.z);
   const panel = cache.drop !== undefined;
   const {color, badge} = armory.tuning[cache.kind];
@@ -2758,8 +2796,8 @@ function drawSprites(time) {
     ...run.ice.map(item => ({item, paint: drawIcePatch})),
     ...run.pods.filter(item => item.health > 0).map(item => ({item, paint: drawSeedPod})),
     ...run.fallen.map(item => ({item,paint:drawFallenSprite})),
-    ...run.gates.map(item => ({item, paint: drawGate})),
-    ...run.caches.filter(cache => !cache.passed).map(item => ({item, paint: drawArmoryCache})),
+    ...run.gates.filter(item=>levels[levelIndex].scenery!=='spiral' || item.z<=spiral.bendStart).map(item => ({item, paint: drawGate})),
+    ...run.caches.filter(cache => !cache.passed || cache.station==='turret').map(item => ({item, paint: drawArmoryCache})),
     ...run.barricades.map(item => ({item, paint: drawBarricade})),
     ...run.enemies.filter(item => item.health > 0 && !item.passed).map(item => ({
       item, paint: enemy => {
@@ -2936,7 +2974,7 @@ function draw(time) {
   ctx.clearRect(0, 0, width, height);
   const stage = onStage();
   const level = levels[levelIndex];
-  if (!stage && !level.chapter) drawWater(time);
+  if (!stage && !level.chapter && level.scenery!=='spiral') drawWater(time);
   const footfall = run.bruteFootfall;
   const impact = run.bruteImpact;
   const stepAge = footfall ? time - footfall.time : Infinity;
@@ -2962,7 +3000,8 @@ function draw(time) {
     }
   } else {
     levels[levelIndex].backdrop?.(time);
-    drawBridge(time);
+    if(level.scenery==='spiral') drawSpiralDeck();
+    else drawBridge(time);
     drawWeather(time, levels[levelIndex].lighting);
   }
   if (footfall && stepFade > 0) {
@@ -3219,10 +3258,16 @@ canvas.tabIndex = 0;
 canvas.addEventListener('pointerdown', event => {
   if (mode !== 'running' || !event.isPrimary || event.button !== 0) return;
   canvas.setPointerCapture(event.pointerId);
-  drag = {id: event.pointerId, start: event.clientX, x: run.x, target: run.x, screenScale: width * cameraHalfScreen()};
+  drag = {id: event.pointerId, pan:run.cameraX, start: event.clientX, x: run.x, target: run.x, screenScale: width * cameraHalfScreen()};
 });
 canvas.addEventListener('pointermove', event => {
   if (drag?.id !== event.pointerId) return;
+  if(levels[levelIndex].scenery==='spiral'){
+    const bounds=canvas.getBoundingClientRect(), fraction=(event.clientX-bounds.left)/bounds.width;
+    drag.target=fraction<spiral.edgeTouch?-spiral.edge:fraction>1-spiral.edgeTouch?spiral.edge:
+      clamp(drag.x+(event.clientX-drag.start)/drag.screenScale+run.cameraX-drag.pan,-spiral.edge,spiral.edge);
+    return;
+  }
   drag.target = clamp(drag.x + (event.clientX - drag.start) / drag.screenScale, -config.edge, config.edge);
 });
 for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture']) {

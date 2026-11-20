@@ -184,3 +184,7 @@ kbd { display: inline-block; min-width: 24px; text-align: center; border: 1px so
 
 #environment-art { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .game-field[data-environment] #breakwater { background:transparent; }
+
+.game-field.spiral-field, .spiral-field #breakwater {
+  background: linear-gradient(#a7c7d6 0%, #e8d5ae 32%, #c29463 58%, #a67c51 100%);
+}
