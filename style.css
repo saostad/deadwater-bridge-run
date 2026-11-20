@@ -1,9 +1,9 @@
 :root {
   color-scheme: dark;
   font: 16px system-ui, sans-serif;
-  color: #edf1e9;
+  color: #f5f8ff;
   background: #101518;
-  --accent: #ffc273;
+  --accent: #ffc442;
   --muted: #a3b1b0;
   --line: #323e41;
 }
@@ -11,7 +11,7 @@
 body {
   margin: 0;
   min-width: 300px;
-  background: radial-gradient(ellipse at 50% 0%, #263233, transparent 60%);
+  background: radial-gradient(ellipse at 50% 0%, #204152, transparent 60%);
 }
 main { width: min(746px, 100%); margin: auto; padding: 12px 28px 36px; }
 .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
@@ -62,11 +62,11 @@ button:focus-visible { outline: 3px solid white; outline-offset: 4px; }
 .progress { position: relative; pointer-events: none; padding: 9px 12px; background: #101719e8; }
 .progress div { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 4px 8px; }
 .progress div > span { white-space: nowrap; }
-.squad-readout { color: var(--accent); }
+.squad-readout { color: #75e8fb; }
 #squad { display: inline-block; min-width: 3ch; text-align: right; font-size: 24px; line-height: 1; font-variant-numeric: tabular-nums; }
-progress { display: block; width: 100%; height: 4px; margin-top: 7px; accent-color: var(--accent); border: 0; background: #536064; }
+progress { display: block; width: 100%; height: 4px; margin-top: 7px; accent-color: #22d6f5; border: 0; background: #536064; }
 progress::-webkit-progress-bar { background: #536064; }
-progress::-webkit-progress-value { background: var(--accent); }
+progress::-webkit-progress-value { background: #22d6f5; }
 aside { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .panel, .restart { border: 1px solid var(--line); border-radius: 10px; background: #1a2327; padding: 16px; }
 dl { margin: 0; }

@@ -61,13 +61,13 @@ const armory = {
   lane: 0.66, aimWidth: 0.20, panelAim: .335, rescueCount: 5, armorCount: 3,
   drumDepth: 21, drumWidth: 0.44, drumPower: 3, drumCollision: 3, blastTime: 0.38,
   tuning: {
-    rapid: {label: 'Rapid rifle', badge: 'RAPID RIFLE', color: '#ffbc55', hits: 8, hitStep: 3, intervalMultiplier: 0.82},
-    spread: {label: 'Twin carbine', badge: 'TWIN CARBINE', color: '#51e7ed', hits: 8, hitStep: 3, rounds: 1},
-    scatter: {label: 'Scattergun', badge: 'SCATTERGUN', color: '#e4a8ff', hits: 11, hitStep: 3, rounds: 2, range: 36},
-    longshot: {label: 'Longshot', badge: 'LONGSHOT', color: '#9de99c', hits: 11, hitStep: 3, range: 24, aim: 0.055},
-    rescue: {label: 'Rescue crate', badge: 'RESCUE', color: '#7adec0', hits: 5, hitStep: 2},
-    armor: {label: 'Armor crate', badge: 'ARMOR', color: '#9fb7ff', hits: 7, hitStep: 2},
-    drum: {label: 'Shock drum', badge: 'SHOCK', color: '#ec5041', hits: 9, hitStep: 3},
+    rapid: {label: 'Rapid rifle', badge: 'RAPID RIFLE', color: '#fb661d', hits: 8, hitStep: 3, intervalMultiplier: 0.82},
+    spread: {label: 'Twin carbine', badge: 'TWIN CARBINE', color: '#22d6f5', hits: 8, hitStep: 3, rounds: 1},
+    scatter: {label: 'Scattergun', badge: 'SCATTERGUN', color: '#e778fa', hits: 11, hitStep: 3, rounds: 2, range: 36},
+    longshot: {label: 'Longshot', badge: 'LONGSHOT', color: '#9eec65', hits: 11, hitStep: 3, range: 24, aim: 0.055},
+    rescue: {label: 'Rescue crate', badge: 'RESCUE', color: '#3be3a7', hits: 5, hitStep: 2},
+    armor: {label: 'Armor crate', badge: 'ARMOR', color: '#74abff', hits: 7, hitStep: 2},
+    drum: {label: 'Shock drum', badge: 'SHOCK', color: '#fa4437', hits: 9, hitStep: 3},
   },
 };
 
@@ -2215,8 +2215,8 @@ function drawGate(gate) {
   const glass = ctx.createLinearGradient(x, y - h, x, y);
   const penalty = gate.count < 0;
   glass.addColorStop(0, penalty ? '#fda8a2' : '#95e1ffd9');
-  glass.addColorStop(0.14, penalty ? '#d5403a' : '#359ce8bc');
-  glass.addColorStop(1, penalty ? '#8c232b' : '#175ab8e5');
+  glass.addColorStop(0.14, penalty ? '#f9443c' : '#15c1f0ee');
+  glass.addColorStop(1, penalty ? '#8c232b' : '#0877cbf2');
   ctx.fillStyle = glass;
   ctx.fillRect(x - w, y - h, 2 * w, truck ? 17 * s : h);
   polygon([[x - w, y - h], [x + w, y - h], [x + w - 4 * s, y - h - 5 * s],
@@ -2369,9 +2369,9 @@ function drawWeaponIcon(kind, x, y, scale) {
 function drawArmoryCache(cache) {
   if(cache.station){
     const [x,y,s]=project(cache.x,cache.z);
-    ctx.fillStyle=cache.station==='turret'?'#c89436':'#986c4d';
+    ctx.fillStyle=cache.station==='turret'?'#f3af24':'#986c4d';
     ctx.fillRect(x-28*s,y-18*s,56*s,18*s);
-    if(cache.station==='turret')line([x,y-16*s],[x+5*s,y-34*s],'#efc760',7*s);
+    if(cache.station==='turret')line([x,y-16*s],[x+5*s,y-34*s],'#ffdd61',7*s);
     ctx.textAlign='center';ctx.fillStyle='white';ctx.font='bold '+Math.max(10,14*s)+'px system-ui';
     ctx.fillText(cache.passed?'ON':String(cache.health),x,y-3*s);
     return;
@@ -2684,7 +2684,7 @@ function figure(x, y, scale, kind, stride, axe = 0, recoil = 0, distant = false,
     const cell=ranger.width/4, h=38*scale, w=h*cell/ranger.height;
     const weapon=run.weapons.at(-1) ?? 'standard';
     const barrelX=x+2.5*scale;
-    line([barrelX,y-h*.64],[barrelX,y-h*.98],weaponEffects[weapon].color,2*scale);
+    line([barrelX,y-h*.64],[barrelX,y-h*.98],shotColor(weapon),2*scale);
     ctx.drawImage(ranger,frame*cell,0,cell,ranger.height,x-w/2,y-h,w,h);
     return;
   }
@@ -3140,7 +3140,7 @@ function draw(time) {
     if (stage) continue;
     const visualScale = config.soldierVisualScale * member.scale;
     const figureSize = size * visualScale;
-    ctx.strokeStyle = run.armor ? '#9ccfffbd' : '#a8f278af';
+    ctx.strokeStyle = run.armor ? '#9ccfffbd' : '#affa57dc';
     ctx.lineWidth = size;
     ctx.beginPath();
     ctx.ellipse(memberX, memberY, radiusX * visualScale, radiusY * visualScale, 0, 0, Math.PI * 2);

@@ -235,7 +235,7 @@ const Breakwater = (() => {
         float face=smoothstep(.01,.08,-rest.z-.09)*smoothstep(1.48,1.51,rest.y)*(1.-smoothstep(1.67,1.71,rest.y));
         c=mix(c,ink*1.05+vec3(.13,.14,.11),face);
       } else if(decal==-3.)c=mix(c*(.66+value),ink*1.6+vec3(.025,.09,.13),smoothstep(.015,.09,rest.z));
-      else if(decal==-7.)c=vec3(.18,.035,.025)+ink*vec3(1.45,.94,.85);
+      else if(decal==-7.)c=vec3(.24,.025,.018)+ink*vec3(1.56,.84,.76);
       else c*=.48+value*2.15;
     }
     if(decal>=0.) {
@@ -322,7 +322,8 @@ const Breakwater = (() => {
         const kind=signs[i], weapon=i<4;
         const grad=c.createLinearGradient(0,0,0,cell);
         grad.addColorStop(0,['#ffd544','#6afffc','#eeacff','#b6ff8b','#99d4a2','#a4d2e4'][i]);
-        grad.addColorStop(1,['#fc792a','#179ed2','#a768cf','#65a26a','#498974','#507693'][i]);
+        grad.addColorStop(.62,armory.tuning[kind].color);
+        grad.addColorStop(1,['#e74a0e','#00a8d8','#b942d1','#56ad38','#079e75','#3468c5'][i]);
         c.fillStyle=grad; c.fillRect(0,0,cell,cell);
         c.fillStyle='#ffffff54'; c.fillRect(0,0,cell,5); c.fillRect(0,cell-6,cell,3);
         if(weapon) {
@@ -398,7 +399,7 @@ const Breakwater = (() => {
         for(const y of [.20,h-.12])m.box(side*w*.5,y,-.108,.048,.048,.026,0xb5b3a1);
       }
     });
-    for (const [name, color] of [['recruit', 0x2979c7], ['penalty', 0xbd3037]]) {
+    for (const [name, color] of [['recruit', 0x10bdee], ['penalty', 0xf0443b]]) {
       make(name, m => {
         m.box(0,.38,0,1.94,.76,.13,color);
         face(m,1.52,.015,.70,-.069,-2);
@@ -411,7 +412,7 @@ const Breakwater = (() => {
       for(let i=1;i<rings.length;i++) for(let j=0;j<20;j++){
         const p=(k,a)=>[rings[k][0],.53+rings[k][1]*Math.cos(a),rings[k][1]*Math.sin(a)];
         const a=j*Math.PI/10,b=(j+1)*Math.PI/10;
-        const band=[3,4,8,9].includes(i), color=band?0x74392f:0xe65339, tag=band?-1:-7;
+        const band=[3,4,8,9].includes(i), color=band?0x74392f:0xfa4437, tag=band?-1:-7;
         const slope=(rings[i-1][1]-rings[i][1])/(rings[i][0]-rings[i-1][0]);
         const na=[slope,Math.cos(a),Math.sin(a)], nb=[slope,Math.cos(b),Math.sin(b)];
         m.triangle(p(i-1,a),p(i-1,b),p(i,b),color,0,tag,undefined,[na,nb,nb]);
@@ -441,7 +442,7 @@ const Breakwater = (() => {
       });
     }
     make('ring',m=>{for(let i=0;i<36;i++){const p=(a,r)=>[r*Math.cos(a),.023,r*Math.sin(a)];const a=i*Math.PI/18,b=(i+1)*Math.PI/18;
-      m.quad(p(a,.38),p(b,.38),p(b,.412),p(a,.412),0xb5ed73);}});
+      m.quad(p(a,.38),p(b,.38),p(b,.412),p(a,.412),0xa3f342);}});
     return models;
   }
   function create(canvas) {
