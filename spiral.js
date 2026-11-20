@@ -43,25 +43,39 @@ function buildSpiralMeshes(make) {
         m.quad(a,b,c,d,color);
         for(const [p,q] of [[a,b],[c,d]]){
           m.quad(p,q,[q[0],q[1]-.4,q[2]],[p[0],p[1]-.4,p[2]],0x555966);
-          if(z>=spiral.bendStart){
+          if(z>=spiral.bendStart || Math.abs(p[0])>(spiral.edge+.20)*Breakwater.camera.halfRoad){
+            m.sleeve([p[0],p[1]+.56,p[2]],[q[0],q[1]+.56,q[2]],.052,.052,0xb9b6a9,0);
+            m.box(p[0],p[1]+.25,p[2],.09,.53,.09,0x696d6b);
             m.sleeve([p[0],p[1]+.28,p[2]],[q[0],q[1]+.28,q[2]],.045,.045,0xbfc4bc,0);
-            m.box(p[0],p[1]+.14,p[2],.07,.28,.07,0x696d6b);
+
           }
         }
       }
     };
-    strip(-.77,.77,-22,spiral.deckEnd,0x9c9690);
+    strip(-.77,.77,-22,spiral.deckEnd,0x69645f);
     for(const side of [-1,1]){
       const outer=side*(spiral.edge+.30),inner=side*.77;
-      strip(Math.min(inner,outer),Math.max(inner,outer),-22,spiral.bendStart,side<0?0x788b94:0xab976f);
+      strip(Math.min(inner,outer),Math.max(inner,outer),-22,spiral.bendStart,side<0?0x63777b:0x877659);
     }
-    m.box(spiral.radius,0,spiral.bendStart*Breakwater.camera.metresPerDepth,3.7,18,3.7,0x897f73);
+    const axis=spiral.bendStart*Breakwater.camera.metresPerDepth;
+    m.loft(spiral.radius,axis,[[-10,2.1,2.1],[9,1.85,1.85]],0xab9983,0,32);
+    for(let y=-8;y<9;y+=1.6)
+      m.loft(spiral.radius,axis,[y,y+.07].map(h=>[h,2.12-(h+10)*.013,2.12-(h+10)*.013]),0x887961,0,32);
+    for(let z=-9;z<axis;z+=3){
+      for(const side of [-1,1])m.box(side*3.58,.014,z,.10,.025,1.9,0xc2ab77);
+    }
   });
   make('goldTurret',m=>{
     m.box(0,.17,0,1.6,.34,1.5,0xb88727);
     m.box(0,.57,0,.48,.72,.52,0x725531);
     m.box(0,1.03,0,.75,.48,.73,0xeab849);
-    for(const x of [-.23,.23])m.box(x,1.06,.68,.14,.14,1.12,0xf4cf6d);
+    m.loft(0,0,[[.32,.68,.59],[.42,.63,.55],[.49,.43,.40]],0x715f44,0,12);
+    for(const x of [-.26,.26]){
+      m.sleeve([x,1.05,.21],[x,1.05,1.29],.14,.115,0xad934e,0);
+      m.sleeve([x,1.05,1.22],[x,1.05,1.43],.155,.155,0xd0b46d,0);
+      m.sleeve([x,1.05,1.431],[x,1.05,1.44],.093,.093,0x353635,0);
+      for(const z of [.45,.59,.73,.87])m.sleeve([x,1.05,z],[x,1.05,z+.055],.156,.156,0x625c48,0);
+    }
   });
   make('roller',m=>{
     m.sleeve([-2,.54,0],[2,.54,0],.53,.53,0x986b49,0);

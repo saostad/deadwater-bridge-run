@@ -236,7 +236,17 @@ const Breakwater = (() => {
     }
     if(mat==7.){outColor=vec4(.94,.19,.12,.48);return;}
     if(mat==6.){outColor=vec4(c,1.);return;}
-    if(mat==5. && n.y>.8){
+    if(deckFinish.w<0. && mat==5.){
+      // Material fixed to the mesh so camera pans do not slide the asphalt grain.
+      vec2 uv=rest.xz;
+      float dust=mottling(uv*.85);
+      float aggregate=mottling(uv*15.)-.5;
+      if(n.y>.8 && c.r<.76){
+        c*=.80+.29*dust+.23*aggregate;
+        float joint=abs(fract((uv.y+.032*mottling(uv*3.))/6.)-.5);
+        c*=.80+.20*smoothstep(.002,.008+fwidth(uv.y)/6.,joint);
+      } else c*=.90+.16*dust+.12*aggregate;
+    } else if(mat==5. && n.y>.8){
       vec2 grid=world.xz/vec2(1.12,1.48); grid.x+=mod(floor(grid.y),2.)*.5;
       vec2 seam=min(fract(grid),1.-fract(grid));
       float edge=min(seam.x,seam.y), aa=max(.002,fwidth(grid.y)*.65);
@@ -257,6 +267,10 @@ const Breakwater = (() => {
       c-=vec3(.06,.045,.031)*smoothstep(.71,.96,mottling(world.xz*1.25));
       c*=mix(.73,1.,smoothstep(.004-aa,.009+aa,edge));
       c+=.025*(1.-smoothstep(.009,.026+aa,edge));
+    }
+    if(deckFinish.w<0. && mat==1. && decal==-3.){
+      float weave=dot(c,vec3(.28,.57,.15));
+      c=vec3(.48,.085,.265)*(.48+1.75*weave);
     }
     float diffuse=max(0.,dot(n,normalize(vec3(-.69,1.,-.46))));
     float sky=.66+.09*n.y+.43*diffuse;
@@ -319,7 +333,7 @@ const Breakwater = (() => {
   function meshes() {
     const {Mesh,character}=BreakwaterModels;
     const models={farWalker:BreakwaterModels.distant(false),farRunner:BreakwaterModels.distant(true),farSiege:BreakwaterModels.distant(false,true)};
-    for(const type of ['squad','walker','runner','boss','siege','armored','raider','hulk','shieldBearer','leaper','spitter','howler']) models[type]=character(type==='shieldBearer'?'shield':type);
+    for(const type of ['squad','ranger','walker','runner','boss','siege','armored','raider','hulk','shieldBearer','leaper','spitter','howler']) models[type]=character(type==='shieldBearer'?'shield':type);
     const make=(name,build)=>{const m=new Mesh();build(m);models[name]=m;};
     for(const kind of Object.keys(weaponEffects))models['gun-'+kind]=BreakwaterModels.gun(kind);
     for(const tool of Object.keys(bossWeapons))models['tool-'+tool]=BreakwaterModels.bossTool(tool);
@@ -513,7 +527,7 @@ const Breakwater = (() => {
       CampaignScenery.place(level.scenery,put);
       if(level.scenery==='spiral'){
         put('interchange',0,0,0,1,5);
-        CampaignScenery.place('canyon',put);
+
       } else if (!level.chapter && (level.split || level.siege)) {
         put('apron',0,0,0,1,5);
         const inner=level.siege?1.91:.33, outer=4.86;
@@ -613,7 +627,7 @@ const Breakwater = (() => {
       const style=weaponEffects[gun];
       function soldier(x,z,phase,stride,kick,fall=0,scale=1) {
         const args=[x,0,z,camera.soldierScale*scale,1,phase,stride,kick*style.recoil,0,1,fall];
-        put('squad',...args);
+        put(level.scenery==='spiral'?'ranger':'squad',...args);
         put('gun-'+gun,...args);
       }
       formation.members.forEach((p,i)=>{
@@ -648,7 +662,7 @@ const Breakwater = (() => {
         gl.bindBuffer(gl.ARRAY_BUFFER,g.buffer);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(g.list),gl.DYNAMIC_DRAW);
       }
       if(level.chapter)gl.uniform4f(uniforms.deckFinish,...level.chapter.deckTint,level.chapter.deckStyle);
-      else gl.uniform4f(uniforms.deckFinish,0,0,0,0);
+      else gl.uniform4f(uniforms.deckFinish,0,0,0,level.scenery==='spiral'?-1:0);
       gl.uniform4f(uniforms.cam,cameraHalfScreen()/X,lift(w,h),distance()*Z,camera.eyeSlope);
       gl.uniform1f(uniforms.cameraRise,rise());
       gl.uniform4f(uniforms.entrance,run.entrance.pan,run.entrance.pitch,entranceCamera.anchoredDepth/distance(),run.entrance.dolly);

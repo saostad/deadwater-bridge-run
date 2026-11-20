@@ -60,7 +60,8 @@ const BreakwaterModels = (() => {
     }
   }
   function character(type) {
-    const m=new Mesh(), soldier=type==='squad', brute=type==='boss', runner=type==='runner';
+    const ranger=type==='ranger';
+    const m=new Mesh(), soldier=type==='squad' || ranger, brute=type==='boss', runner=type==='runner';
     const skin=soldier?0xb87750:brute?0x84856a:runner?0xc6b4a3:0xabaa8b;
     const shirt=soldier?0x176e9d:brute?0x504c43:runner?0x994b4c:({leaper:0x317b97,spitter:0x64853c,howler:0xaf5f2c,raider:0x8e4579,hulk:0x96724f,shield:0x32727b,armored:0x4b6274,siege:0xaf4241}[type] ?? 0x796d57);
     const pants=soldier?0x35495a:runner?0x514144:0x424d52;
@@ -84,6 +85,17 @@ const BreakwaterModels = (() => {
     } else {
       if(type!=='walker' && type!=='siege')m.loft(0,-.064,[[1.69,.125,.118],[1.735,.123,.12],[1.777,.089,.093],[1.79,.046,.06]],runner?0x4c3936:0x534f45,bone);
 
+    }
+    if(ranger){
+      // Rear-facing field pack, webbing and rolled canvas follow the torso joint.
+      m.loft(0,.17,[[1.00,.135,.06],[1.045,.172,.096],[1.26,.164,.104],[1.35,.141,.086]],0x605b47,bone,12);
+      m.box(0,1.105,.265,.22,.102,.045,0x777055,bone);
+      m.sleeve([-.178,1.34,.19],[.178,1.34,.19],.060,.060,0x7d7864,bone);
+      for(const side of [-1,1]){
+        m.sleeve([side*.135,1.44,.09],[side*.142,1.25,.22],.022,.022,0x353934,bone);
+        m.box(side*.105,1.19,.269,.022,.28,.015,0x393c34,bone);
+        m.box(side*.105,1.17,.279,.034,.032,.014,0x999480,bone);
+      }
     }
     if(soldier) {
       // A side pouch leaves the jacket and diagonal sling visible from the player's camera.
@@ -115,8 +127,8 @@ const BreakwaterModels = (() => {
         const shoulder=[s*.228,1.386,-.03];
         const elbow=s>0?[.335,1.16,.025]:[-.25,1.19,-.22];
         const hand=s>0?[.227,1.24,-.22]:[.178,1.255,-.485];
-        m.loft(s*.222,-.037,[[1.302,.071,.074],[1.36,.108,.112],[1.415,.100,.106],[1.455,.061,.067]],0xd79b43,bone,12);
-        m.sleeve(shoulder,elbow,.105,.079,0xe5a030,bone);
+        m.loft(s*.222,-.037,[[1.302,.071,.074],[1.36,.108,.112],[1.415,.100,.106],[1.455,.061,.067]],ranger?0x814358:0xd79b43,bone,12);
+        m.sleeve(shoulder,elbow,.105,.079,ranger?0x8c385c:0xe5a030,bone);
         m.sleeve(elbow,hand,.076,.048,skin,bone);
         m.loft(hand[0],hand[2],[[hand[1]-.048,.033,.041],[hand[1]-.022,.052,.058],[hand[1]+.020,.054,.057],[hand[1]+.045,.040,.045]],leather,bone,9);
       } else {

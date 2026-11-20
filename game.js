@@ -739,14 +739,14 @@ environmentArt.addEventListener('error', () => {
 function setEnvironment(level) {
   const field = stageCanvas.parentElement;
   field.classList.toggle('spiral-field',level.scenery==='spiral');
-  const scene = level.chapter ? level.scenery : '';
+  const scene = level.chapter || level.scenery==='spiral' ? level.scenery : '';
   if (scene === (environmentArt.dataset.scene ?? '')) return;
   environmentStatus.hidden = true;
   environmentArt.dataset.scene = scene;
   environmentArt.hidden = !scene;
   if (scene) {
     field.dataset.environment = scene;
-    field.style.backgroundColor = level.chapter.surface[1];
+    field.style.backgroundColor = level.chapter?.surface[1] ?? '#b58c69';
     environmentArt.src = 'assets/environments/' + scene + '.webp';
   } else {
     delete field.dataset.environment;
