@@ -66,10 +66,10 @@ function loadPaintedAtlas(kind) {
   image.onerror = () => {
     console.error('Character atlas unavailable', {kind, fallback: true, using: 'modeled figure'});
     const status = byId('art-status');
-    status.textContent = (kind==='ranger' ? 'Soldier' : enemyTypes[kind].label) + ' art unavailable. Showing the modeled figure. Reload to retry.';
+    status.textContent = (kind==='ranger' ? 'Soldier' : kind==='walkerArt' ? 'Walker' : enemyTypes[kind].label) + ' art unavailable. Showing the modeled figure. Reload to retry.';
     status.hidden = false;
   };
-  const source = kind === 'ranger' ? rangerAtlasSource : kind === 'boiler' ? (typeof boilerAtlasSource === 'string' && boilerAtlasSource)
+  const source = kind === 'walkerArt' ? walkerAtlasSource : kind === 'ranger' ? rangerAtlasSource : kind === 'boiler' ? (typeof boilerAtlasSource === 'string' && boilerAtlasSource)
     : (typeof specialistAtlasSources === 'object' && specialistAtlasSources[kind]);
   if (source) image.src = source;
   else image.onerror();

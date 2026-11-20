@@ -155,6 +155,11 @@ const Breakwater = (() => {
     if(kind==9.){
       p.x += p.y*pose.x;
       p.y *= pose.y;
+      if(collapse.x>0.){
+        float a=collapse.x, h=p.y;
+        p.y=max(.015,h*cos(a));
+        p.xz+=h*sin(a)*vec2(sin(collapse.y),cos(collapse.y));
+      }
     }
     p.x*=info.y; n.x/=info.y;
     if(kind==7.)p.z*=info.w;
@@ -349,6 +354,7 @@ const Breakwater = (() => {
     CampaignScenery.build(make);
     buildSpiralMeshes(make);
     const face=(m,w,y,h,z,tile,lean=0) => m.quad([-w/2,y,z],[-w/2,y+h,z+lean],[w/2,y+h,z+lean],[w/2,y,z],0xffffff,0,tile);
+    make('walkerArt',m=>face(m,1,-5/256,1,0,-2));
     make('rangerArt',m=>face(m,1.11,0,1.85,0,-2));
     for(const kind of encounterTuning.roster)make(kind,m=>face(m,1,-5/256,1,0,-2));
     make('icePatch',m=>{
@@ -589,13 +595,16 @@ const Breakwater = (() => {
       }
       function zombie(e) {
         if(e.phase==='tunnel')return;
-        const atlas=paintedAtlases.get(e.kind);
+        const walker=!e.kind && !e.boss;
+        const art=walker?'walkerArt':e.kind;
+        const atlas=paintedAtlases.get(art);
         if(atlas?.naturalWidth){
-          uploadSheet(e.kind,atlas);
-          const pose=paintedPose(e,time);
-          put(e.kind,e.x*X,0,e.z*Z,e.size,9,pose.lean,pose.stretch,Number(pose.mirror),
-            0,1,0,pose.frame,0,0,0,e.fade??0);
-          put('contact',e.x*X,.013,e.z*Z,e.size*(1-(e.fade??0)),8);
+          uploadSheet(art,atlas);
+          const pose=walker?walkerArtPose(e,time):paintedPose(e,time);
+          const size=walker?2.05*(e.size??horde.bodyScale)/horde.bodyScale:e.size;
+          put(art,e.x*X,(e.height??0),e.z*Z,size,9,pose.lean,pose.stretch,Number(pose.mirror),
+            0,1,0,pose.frame,walker?(e.tilt??0):0,e.angle??0,0,e.fade??0);
+          put('contact',e.x*X,.013,e.z*Z,size*(walker?.55:1)*(1-(e.fade??0)),8);
           return;
         }
         const poseTime=e.time ?? time;
@@ -639,11 +648,11 @@ const Breakwater = (() => {
       const style=weaponEffects[gun];
       function soldier(x,z,phase,stride,kick,fall=0,scale=1) {
         const args=[x,0,z,camera.soldierScale*scale,1,phase,stride,kick*style.recoil,0,1,fall];
-        const atlas=level.scenery==='spiral' && paintedAtlases.get('ranger');
+        const atlas=paintedAtlases.get('ranger');
         if(atlas?.naturalWidth){
           uploadSheet('rangerArt',atlas);
           put('rangerArt',x,0,z,camera.soldierScale*scale,10,0,0,0,0,1,fall,rangerFrame(phase,stride,kick));
-        } else put(level.scenery==='spiral'?'ranger':'squad',...args);
+        } else put('ranger',...args);
         put('gun-'+gun,...args);
       }
       formation.members.forEach((p,i)=>{

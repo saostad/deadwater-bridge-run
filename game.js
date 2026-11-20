@@ -795,7 +795,8 @@ function reset(nextMode) {
   selectRenderer();
   const level = levels[levelIndex];
   setEnvironment(level);
-  if(level.scenery==='spiral')loadPaintedAtlas('ranger');
+  loadPaintedAtlas('ranger');
+  loadPaintedAtlas('walkerArt');
   const difficultyName = difficultySelect.selectedOptions[0].textContent.toUpperCase();
   levelSelect.value = levelIndex;
   byId('level-number').textContent = 'LEVEL ' + String(levelIndex + 1).padStart(2, '0') + ' · ' + difficultyName;
@@ -2677,7 +2678,7 @@ function paintBossTool(art, x, y, angle, tool) {
 }
 
 function figure(x, y, scale, kind, stride, axe = 0, recoil = 0, distant = false, tool = 'axe', finish = 'plating') {
-  const ranger=kind==='squad' && levels[levelIndex].scenery==='spiral' && paintedAtlases.get('ranger');
+  const ranger=kind==='squad' && paintedAtlases.get('ranger');
   if(ranger?.naturalWidth){
     const frame=rangerFrame(stride,Math.abs(stride),recoil);
     const cell=ranger.width/4, h=38*scale, w=h*cell/ranger.height;
@@ -2765,12 +2766,23 @@ function bossMeter(enemy, x, barY, s) {
   ctx.fillText(label, left + span / 2, barY - 3 * s);
 }
 
+function walkerArtPose(enemy,time) {
+  const limp = enemy.health === 1;
+  const phase = (enemy.time ?? time) * (limp ? 5 : 7) + (enemy.gaitOffset ?? 0);
+  const stride = Math.sin(phase);
+  const hit = time - (enemy.lastHit ?? -Infinity) < config.impactTime || enemy.tilt > 0;
+  const step = hit ? 3 : Math.abs(stride)<.38 ? 1 : stride<0 ? 0 : 2;
+  return {frame:(enemy.coat ?? 0)*4+step,lean:stride*(limp?.042:.018),
+    stretch:1-.025*Math.abs(stride),mirror:false};
+}
+
 function drawPaintedEnemy(enemy, time) {
-  const atlas = paintedAtlases.get(enemy.kind);
+  const walker = !enemy.kind && !enemy.boss;
+  const atlas = paintedAtlases.get(walker?'walkerArt':enemy.kind);
   if (!atlas?.naturalWidth) return false;
   const [x, y, s] = project(enemy.x, enemy.z);
-  const pose = paintedPose(enemy, time);
-  const size = enemy.size * paintedMotion.canvasScale * s;
+  const pose = walker ? walkerArtPose(enemy,time) : paintedPose(enemy, time);
+  const size = (walker ? (enemy.size??horde.bodyScale)*34 : enemy.size*paintedMotion.canvasScale) * s;
   const tile = atlas.width / 4;
   ctx.save();
   ctx.translate(x, y);
@@ -2779,6 +2791,11 @@ function drawPaintedEnemy(enemy, time) {
   ctx.beginPath();
   ctx.ellipse(size * .09, 0, size * .33, size * .07, 0, 0, Math.PI * 2);
   ctx.fill();
+  if(walker && enemy.tilt){
+    ctx.translate(0,-enemy.height*23*s);
+    ctx.transform(1,0,-Math.sin(enemy.angle)*Math.sin(enemy.tilt),
+      Math.cos(enemy.tilt)+Math.cos(enemy.angle)*.42*Math.sin(enemy.tilt),0,0);
+  }
   ctx.transform(pose.mirror ? -1 : 1, 0, -pose.lean, pose.stretch, 0, 0);
   ctx.drawImage(atlas, (pose.frame % 4) * tile, Math.floor(pose.frame / 4) * tile,
     tile, tile, -size / 2, -size * 251 / 256, size, size);
