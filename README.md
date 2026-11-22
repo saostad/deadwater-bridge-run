@@ -41,7 +41,7 @@ Open the deployed HTTPS game URL on the phone.
 - **Android Chrome** — Tap **Install Deadwater** when it appears below the controls, or choose **Install app** or **Add to Home screen** in Chrome’s menu.
 - **iPhone Safari** — Open **Share**, choose **Add to Home Screen**, enable **Open as Web App** if shown, and tap **Add**.
 
-Open the app online and wait for **Ready for offline play** below the controls. All 40 levels are then available offline on that device. After an update downloads, close every open game window and reopen Deadwater to use the new version.
+Open the app online and wait for **Ready for offline play** below the controls. All 60 levels are then available offline on that device. After an update downloads, close every open game window and reopen Deadwater to use the new version.
 
 ## Sound credits
 

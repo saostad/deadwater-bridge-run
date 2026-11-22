@@ -439,6 +439,7 @@ const levels = [
   },
   ...buildChapterLevels(),
   ...buildSpiralLevels(),
+  ...buildScenarioLevels(),
 ];
 let levelIndex = 0;
 
@@ -486,7 +487,7 @@ for (const [index, level] of levels.entries()) {
   const option = document.createElement('option');
   option.value = index;
   option.textContent = (index + 1) + '. ' + level.name;
-  const chapter = level.chapter ?? (level.scenery==='spiral' ? spiral : null);
+  const chapter = level.chapter ?? level.operation ?? (level.scenery==='spiral' ? spiral : null);
   if (chapter) {
     if (!chapterOptions.has(chapter)) {
       const group = document.createElement('optgroup');
@@ -858,6 +859,7 @@ function reset(nextMode) {
     run.caches.push(run.roller);
   }
   setupFlow(level);
+  setupScenario(level);
   const health = Math.ceil((charge.health + charge.healthPerLevel * bossTier) * difficulty.bruteHealth);
   const shield = Math.ceil((charge.shield + charge.shieldPerLevel * bossTier) * difficulty.bruteHealth);
   run.enemies.push({
@@ -914,11 +916,11 @@ function setMode(nextMode) {
   const stage = level.name.toUpperCase();
   const breached = run.breaches >= run.breachLimit;
   const messages = {
-    ready: [level.chapter ? level.chapter.name.toUpperCase() + ' · ' + (level.part+1) + '/' + level.chapter.missions.length : stage, level.title, level.objective, returningPlayer ? 'Continue level ' + (levelIndex + 1) : 'Deploy squad'],
+    ready: [level.chapter ?? level.operation ? (level.chapter ?? level.operation).name.toUpperCase() + ' · ' + (level.part+1) + '/' + (level.chapter ?? level.operation).missions.length : stage, level.title, level.objective, returningPlayer ? 'Continue level ' + (levelIndex + 1) : 'Deploy squad'],
     paused: [stage, 'Paused.', 'Resume when your squad is ready.', 'Resume'],
     won: [canAdvance ? 'MISSION COMPLETE' : 'CAMPAIGN COMPLETE', canAdvance ? 'Bridge secured.' : 'All crossings secured.', run.count + ' survived · ' + run.kills + ' eliminated.', canAdvance ? 'Next level' : 'Play again'],
-    lost: ['MISSION FAILED', breached ? 'Bridge breached.' : 'Squad lost.',
-      breached ? run.breaches + ' zombies crossed the defense line. Return to the center when a wave closes in.' : run.lastThreat + ' took out the last squad member.' + (run.bruteImpact?.lost
+    lost: ['MISSION FAILED', run.objectiveFailure ? 'Objective failed.' : breached ? (level.scenario?.protect ? 'Civilians overrun.' : 'Bridge breached.') : 'Squad lost.',
+      run.objectiveFailure ? run.objectiveFailure : breached ? run.breaches + ' zombies crossed the defense line. Return to the center when a wave closes in.' : run.lastThreat + ' took out the last squad member.' + (run.bruteImpact?.lost
         ? ' Last boss strike: ' + damageSummary(run.bruteImpact.blocked, run.bruteImpact.lost) + '.' : ''), 'Try again'],
   };
   const [label, title, description, button] = messages[mode];
@@ -960,6 +962,9 @@ function updateHud() {
     }
   }
   byId('armor').textContent = run.armor;
+  const tracker = byId('objective-tracker'), objectives = scenarioTracker(level);
+  tracker.hidden = !objectives;
+  if (tracker.textContent !== objectives) tracker.textContent = objectives;
 }
 
 function damage(count, threat, announce = true) {
@@ -1151,6 +1156,7 @@ function bruteAttackPose(enemy, time) {
 
 function defeatEnemy(enemy, sourceX, blast = false) {
   run.kills++;
+  scenarioKill(enemy);
   const type = enemyTypes[enemy.kind];
   const fast = enemy.kind === 'runner' || enemy.kind === 'raider';
   const heavy = enemy.boss || enemy.kind === 'hulk' || enemy.kind === 'armored' || ['boiler', 'breaker', 'frost'].includes(enemy.kind);
@@ -1218,6 +1224,7 @@ function unlockCache(cache) {
     run.weapons.push(cache.kind);
   }
   cache.passed = true;
+  scenarioDetonate(cache);
   const upgrade = armory.tuning[cache.kind];
   switch (cache.kind) {
     case 'rapid':
@@ -1478,7 +1485,7 @@ function step(dt) {
   }
   run.elapsed += dt;
   if (run.elapsed >= run.combatNoticeUntil) combatStatus.hidden = true;
-  const travel = config.approachSpeed * run.difficulty.pace * dt;
+  const travel = config.approachSpeed * run.difficulty.pace * dt * updateScenario(level);
   run.elapsedDistance = Math.min(level.length, run.elapsedDistance + travel);
   run.flash = Math.max(0, run.flash - dt);
   run.contactCooldown = Math.max(0, run.contactCooldown - dt);
@@ -1516,6 +1523,7 @@ function step(dt) {
         }
       } else {
         changeSquadSize(gate.count, gate.x);
+        scenarioRescue(gate);
         playSound('recruit');
       }
     }
@@ -1542,7 +1550,7 @@ function step(dt) {
   for (const enemy of run.enemies) {
     if (enemy.health <= 0 || enemy.passed) continue;
     if (enemy.boss) {
-      advanceBrute(enemy, dt);
+      if (!bossHeld(enemy)) advanceBrute(enemy, dt);
       continue;
     }
     const type = enemyTypes[enemy.kind];
@@ -1712,9 +1720,13 @@ function step(dt) {
   if (hitThisStep) playSound(armorHit ? 'armorHit' : 'hit');
   if (!run.count || run.breaches >= run.breachLimit) {
     setMode('lost');
-  } else if (run.enemies.at(-1).health === 0) {
+  } else if (run.scenario?.failure) {
+    run.objectiveFailure = run.scenario.failure;
+    setMode('lost');
+  } else if (run.enemies.at(-1).health === 0 && !holding()) {
+    run.objectiveFailure = scenarioVerdict(level);
     run.elapsedDistance = level.length;
-    setMode('won');
+    setMode(run.objectiveFailure ? 'lost' : 'won');
   }
   updateCrowdCamera(dt);
   if (mode === 'running') updateEntranceCamera();
@@ -2213,14 +2225,14 @@ function drawGate(gate) {
   if (truck) drawSupplyTruck(x, y, s, w);
   castShadow(x - w, x + w, y, s);
   const glass = ctx.createLinearGradient(x, y - h, x, y);
-  const penalty = gate.count < 0;
-  glass.addColorStop(0, penalty ? '#fda8a2' : '#95e1ffd9');
-  glass.addColorStop(0.14, penalty ? '#f9443c' : '#15c1f0ee');
-  glass.addColorStop(1, penalty ? '#8c232b' : '#0877cbf2');
+  const penalty = gate.count < 0, survivor = gate.kind === 'survivor';
+  glass.addColorStop(0, penalty ? '#fda8a2' : survivor ? '#a8ffd9d9' : '#95e1ffd9');
+  glass.addColorStop(0.14, penalty ? '#f9443c' : survivor ? '#2fd99aee' : '#15c1f0ee');
+  glass.addColorStop(1, penalty ? '#8c232b' : survivor ? '#0d8a5cf2' : '#0877cbf2');
   ctx.fillStyle = glass;
   ctx.fillRect(x - w, y - h, 2 * w, truck ? 17 * s : h);
   polygon([[x - w, y - h], [x + w, y - h], [x + w - 4 * s, y - h - 5 * s],
-    [x - w + 3 * s, y - h - 5 * s]], penalty ? '#ff9590' : '#7acefd');
+    [x - w + 3 * s, y - h - 5 * s]], penalty ? '#ff9590' : survivor ? '#86f5c6' : '#7acefd');
   for (const side of truck ? [] : [-1, 1]) {
     const post = x + side * w;
     prism(post - 2.6 * s, y - h, post + 2.4 * s, y + 1.4 * s, 2.5 * s, 2 * s,
@@ -3077,6 +3089,7 @@ function draw(time) {
   drawSpecialSignals(time,stage);
   drawArmorReadouts(time,stage);
   drawFlow(level);
+  drawScenario(level,time);
   for (const body of run.fallen) {
     const t=(body.age-body.contact)/falls.dustTime;
     if(t<0 || t>=1 || body.z>falls.soundRange || body.z < -7)continue;

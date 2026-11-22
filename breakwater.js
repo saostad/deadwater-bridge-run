@@ -399,7 +399,7 @@ const Breakwater = (() => {
         for(const y of [.20,h-.12])m.box(side*w*.5,y,-.108,.048,.048,.026,0xb5b3a1);
       }
     });
-    for (const [name, color] of [['recruit', 0x10bdee], ['penalty', 0xf0443b]]) {
+    for (const [name, color] of [['recruit', 0x10bdee], ['penalty', 0xf0443b], ['survivor', 0x2fd99a]]) {
       make(name, m => {
         m.box(0,.38,0,1.94,.76,.13,color);
         face(m,1.52,.015,.70,-.069,-2);
@@ -568,7 +568,9 @@ const Breakwater = (() => {
         const truck=g.kind==='truck';
         if(truck) put('truck',g.x*X,0,g.z*Z);
         const tile = g.count < 0 ? 56 - g.count : g.count === 1 ? 6 : 40 + g.count;
-        put(g.count < 0 ? 'penalty' : 'recruit',g.x*X,truck?1.23:0,g.z*Z,1,0,0,0,0,0,1,0,tile);
+        const survivor=g.kind==='survivor';
+        if(survivor)for(const side of [-1,1])put('beacon',g.x*X+side*1.16,0,g.z*Z);
+        put(g.count < 0 ? 'penalty' : survivor ? 'survivor' : 'recruit',g.x*X,truck?1.23:0,g.z*Z,1,0,0,0,0,0,1,0,tile);
       }
       for(const bed of level.beds ?? [])put('plantBed',bed.x*X,0,bed.z*Z);
       for(const b of run.barricades)if(visible(b))put(b.kind==='debris'?'debris':'crate',b.x*X,0,b.z*Z);
